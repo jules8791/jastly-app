@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Queue Master — Badminton Club Queue App by Jastly</title>
+  <meta name="description" content="Queue Master is the smart queue management app for badminton clubs. Real-time courts, player queues, leaderboards and more. Free to download." />
+  <meta property="og:title" content="Queue Master — Badminton Queue App" />
+  <meta property="og:description" content="Run your badminton club's courts and queues like a pro. Real-time, zero paper, works on any phone." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://www.jastly.com" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --yellow: #FFEB3B;
+      --yellow-dim: #F9D71C;
+      --purple: #4A148C;
+      --purple-light: #6A1FAD;
+      --bg: #000;
+      --surface: #111;
+      --surface2: #1A1A1A;
+      --border: #222;
+      --gray1: #AAA;
+      --gray2: #666;
+      --white: #FFF;
+      --green: #4CAF50;
+      --blue: #2196F3;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ── NAV ──────────────────────────────────────────────── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 40px;
+      background: rgba(0, 0, 0, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+
+    .nav-logo-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    .nav-logo-text {
+      font-weight: 800;
+      font-size: 18px;
+      color: var(--yellow);
+      letter-spacing: -0.5px;
+    }
+
+    .nav-logo-by {
+      font-size: 11px;
+      color: var(--gray2);
+      margin-top: -2px;
+      font-weight: 500;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      color: var(--gray1);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover { color: var(--white); }
+
+    .btn-nav {
+      background: var(--yellow);
+      color: #000;
+      padding: 9px 22px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+    }
+
+    .btn-nav:hover { background: var(--yellow-dim); transform: translateY(-1px); }
+
+    /* ── HERO ─────────────────────────────────────────────── */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      padding: 120px 40px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-glow {
+      position: absolute;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 600px;
+      background: radial-gradient(ellipse at center, rgba(74,20,140,0.35) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-glow-2 {
+      position: absolute;
+      bottom: -100px; right: -200px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(ellipse at center, rgba(255,235,59,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 80px;
+      align-items: center;
+      width: 100%;
+      position: relative;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(74,20,140,0.3);
+      border: 1px solid rgba(74,20,140,0.6);
+      border-radius: 100px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #C084FC;
+      margin-bottom: 24px;
+    }
+
+    .hero-title {
+      font-size: clamp(42px, 6vw, 72px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: -2px;
+      margin-bottom: 24px;
+    }
+
+    .hero-title span {
+      color: var(--yellow);
+    }
+
+    .hero-subtitle {
+      font-size: 18px;
+      color: var(--gray1);
+      line-height: 1.7;
+      margin-bottom: 40px;
+      max-width: 480px;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 48px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--yellow);
+      color: #000;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-weight: 800;
+      font-size: 16px;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 24px rgba(255,235,59,0.25);
+    }
+
+    .btn-primary:hover {
+      background: var(--yellow-dim);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(255,235,59,0.35);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: transparent;
+      color: var(--white);
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 16px;
+      text-decoration: none;
+      border: 1px solid #333;
+      transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    }
+
+    .btn-secondary:hover {
+      border-color: #555;
+      background: rgba(255,255,255,0.05);
+      transform: translateY(-2px);
+    }
+
+    .hero-stats {
+      display: flex;
+      gap: 32px;
+    }
+
+    .hero-stat {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hero-stat-num {
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--yellow);
+      letter-spacing: -1px;
+    }
+
+    .hero-stat-label {
+      font-size: 12px;
+      color: var(--gray2);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* ── PHONE MOCKUP ─────────────────────────────────────── */
+    .hero-mockup {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .phone {
+      width: 280px;
+      height: 560px;
+      background: var(--surface);
+      border-radius: 40px;
+      border: 2px solid #333;
+      overflow: hidden;
+      position: relative;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    .phone-notch {
+      width: 100px;
+      height: 26px;
+      background: #000;
+      border-radius: 0 0 16px 16px;
+      margin: 0 auto 0;
+      position: relative;
+      z-index: 10;
+    }
+
+    .phone-screen {
+      padding: 0 14px 14px;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    .app-header {
+      background: var(--yellow);
+      margin: 0 -14px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .app-header-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: #000;
+    }
+
+    .app-header-id {
+      font-size: 9px;
+      color: rgba(0,0,0,0.6);
+    }
+
+    .court-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 10px 0 8px;
+    }
+
+    .court-card {
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 70px;
+      border: 1px solid;
+    }
+
+    .court-busy {
+      background: rgba(74,0,0,0.8);
+      border-color: #F44336;
+    }
+
+    .court-free {
+      background: var(--surface2);
+      border-color: #333;
+    }
+
+    .court-label {
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--yellow);
+      margin-bottom: 4px;
+    }
+
+    .court-players {
+      font-size: 7px;
+      color: var(--white);
+      font-weight: 600;
+    }
+
+    .court-free-text {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--green);
+      text-align: center;
+      margin-top: 18px;
+    }
+
+    .app-banner {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+
+    .banner-next { font-size: 9px; font-weight: 700; color: var(--yellow); }
+
+    .banner-btn {
+      background: var(--purple);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--white);
+    }
+
+    .queue-item {
+      background: var(--surface2);
+      border-radius: 6px;
+      padding: 7px 10px;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .queue-num { font-size: 8px; color: var(--gray2); width: 14px; }
+    .queue-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .queue-name { font-size: 9px; font-weight: 600; color: var(--white); }
+
+    .phone-float {
+      position: absolute;
+      right: -60px;
+      bottom: 60px;
+      width: 200px;
+      height: 380px;
+      background: var(--surface);
+      border-radius: 30px;
+      border: 2px solid #333;
+      opacity: 0.6;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
+
+    /* ── SECTION SHARED ───────────────────────────────────── */
+    section {
+      padding: 100px 40px;
+    }
+
+    .section-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--purple-light);
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: clamp(32px, 4vw, 52px);
+      font-weight: 900;
+      letter-spacing: -1.5px;
+      line-height: 1.1;
+      margin-bottom: 20px;
+    }
+
+    .section-title span { color: var(--yellow); }
+
+    .section-subtitle {
+      font-size: 18px;
+      color: var(--gray1);
+      max-width: 560px;
+      line-height: 1.7;
+    }
+
+    /* ── FEATURES ─────────────────────────────────────────── */
+    .features { background: var(--surface); }
+
+    .features-header {
+      text-align: center;
+      margin-bottom: 70px;
+    }
+
+    .features-header .section-subtitle { margin: 0 auto; }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .feature-card:hover {
+      border-color: rgba(255,235,59,0.3);
+      transform: translateY(-4px);
+    }
+
+    .feature-icon {
+      font-size: 36px;
+      margin-bottom: 20px;
+      display: block;
+    }
+
+    .feature-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--white);
+      margin-bottom: 10px;
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--gray1);
+      line-height: 1.7;
+    }
+
+    /* ── HOW IT WORKS ─────────────────────────────────────── */
+    .how-it-works { background: var(--bg); }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 40px;
+      margin-top: 60px;
+      position: relative;
+    }
+
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 36px;
+      left: calc(16.66% + 20px);
+      right: calc(16.66% + 20px);
+      height: 2px;
+      background: linear-gradient(to right, var(--purple), var(--yellow));
+    }
+
+    .step {
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    .step-number {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--white);
+      margin: 0 auto 24px;
+      border: 3px solid var(--yellow);
+      position: relative;
+      z-index: 1;
+    }
+
+    .step-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .step-desc {
+      font-size: 15px;
+      color: var(--gray1);
+      line-height: 1.7;
+    }
+
+    /* ── FOR ANY CLUB ─────────────────────────────────────── */
+    .for-clubs {
+      background: var(--surface);
+    }
+
+    .clubs-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 48px;
+    }
+
+    .club-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .club-card-icon { font-size: 32px; margin-bottom: 12px; display: block; }
+
+    .club-card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .club-card-desc {
+      font-size: 13px;
+      color: var(--gray1);
+      line-height: 1.6;
+    }
+
+    /* ── TESTIMONIAL ──────────────────────────────────────── */
+    .testimonial-section { background: var(--bg); }
+
+    .testimonial-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-top: 60px;
+    }
+
+    .testimonial-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+    }
+
+    .testimonial-stars {
+      color: var(--yellow);
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+
+    .testimonial-text {
+      font-size: 15px;
+      color: var(--gray1);
+      line-height: 1.7;
+      margin-bottom: 20px;
+      font-style: italic;
+    }
+
+    .testimonial-author {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .testimonial-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--purple);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .testimonial-name { font-size: 14px; font-weight: 700; }
+    .testimonial-role { font-size: 12px; color: var(--gray2); }
+
+    /* ── DOWNLOAD ─────────────────────────────────────────── */
+    .download {
+      background: linear-gradient(135deg, var(--purple) 0%, #1A0040 100%);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .download::before {
+      content: '';
+      position: absolute;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse at center, rgba(255,235,59,0.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+
+    .download .section-title {
+      font-size: clamp(36px, 5vw, 60px);
+      margin-bottom: 16px;
+    }
+
+    .download .section-subtitle {
+      margin: 0 auto 48px;
+      color: rgba(255,255,255,0.7);
+    }
+
+    .download-buttons {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+
+    .store-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.25);
+      color: var(--white);
+      padding: 14px 28px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 15px;
+      transition: background 0.2s, transform 0.15s;
+      backdrop-filter: blur(8px);
+    }
+
+    .store-btn:hover {
+      background: rgba(255,255,255,0.18);
+      transform: translateY(-2px);
+    }
+
+    .store-btn.web-btn {
+      border-color: var(--yellow);
+      background: rgba(255,235,59,0.08);
+    }
+
+    .store-btn.web-btn:hover {
+      background: rgba(255,235,59,0.18);
+    }
+
+    .store-btn-icon { font-size: 28px; }
+    .store-btn-sub { font-size: 11px; font-weight: 400; opacity: 0.75; display: block; }
+    .store-btn-main { font-size: 16px; font-weight: 800; display: block; }
+
+    .download-note {
+      font-size: 13px;
+      color: rgba(255,255,255,0.45);
+      margin-top: 8px;
+    }
+
+    /* ── FOOTER ───────────────────────────────────────────── */
+    footer {
+      background: #000;
+      border-top: 1px solid var(--border);
+      padding: 48px 40px 32px;
+    }
+
+    .footer-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .footer-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 40px;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .footer-brand .nav-logo-text { font-size: 22px; }
+    .footer-tagline {
+      font-size: 14px;
+      color: var(--gray2);
+      margin-top: 8px;
+      max-width: 280px;
+      line-height: 1.6;
+    }
+
+    .footer-links-group { display: flex; gap: 60px; flex-wrap: wrap; }
+
+    .footer-links-col h4 {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--gray2);
+      margin-bottom: 16px;
+    }
+
+    .footer-links-col ul { list-style: none; }
+
+    .footer-links-col li { margin-bottom: 10px; }
+
+    .footer-links-col a {
+      color: var(--gray1);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
+    }
+
+    .footer-links-col a:hover { color: var(--white); }
+
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-copy { font-size: 13px; color: var(--gray2); }
+
+    .footer-domains {
+      display: flex;
+      gap: 16px;
+    }
+
+    .footer-domain {
+      font-size: 13px;
+      color: var(--gray2);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-domain:hover { color: var(--yellow); }
+
+    /* ── SCROLL ANIMATIONS ─────────────────────────────────── */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .fade-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── RESPONSIVE ───────────────────────────────────────── */
+    @media (max-width: 900px) {
+      nav { padding: 14px 20px; }
+      .nav-links { display: none; }
+      .hero { padding: 100px 20px 60px; }
+      .hero-content { grid-template-columns: 1fr; gap: 60px; }
+      .hero-mockup { order: -1; }
+      .phone { width: 240px; height: 480px; }
+      .phone-float { display: none; }
+      section { padding: 70px 20px; }
+      .feature-grid { grid-template-columns: 1fr 1fr; }
+      .steps { grid-template-columns: 1fr; gap: 48px; }
+      .steps::before { display: none; }
+      .clubs-grid { grid-template-columns: 1fr 1fr; }
+      .testimonial-grid { grid-template-columns: 1fr; }
+      footer { padding: 40px 20px 24px; }
+      .footer-top { flex-direction: column; }
+      .footer-links-group { gap: 32px; }
+      .footer-bottom { flex-direction: column; align-items: flex-start; }
+    }
+
+    @media (max-width: 600px) {
+      .feature-grid { grid-template-columns: 1fr; }
+      .clubs-grid { grid-template-columns: 1fr 1fr; }
+      .hero-cta { flex-direction: column; }
+      .hero-cta .btn-primary, .hero-cta .btn-secondary { justify-content: center; }
+      .download-buttons { flex-direction: column; align-items: center; }
+      .hero-stats { gap: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <a href="#" class="nav-logo">
+      <span class="nav-logo-icon">🏸</span>
+      <div>
+        <div class="nav-logo-text">Queue Master</div>
+        <div class="nav-logo-by">by Jastly</div>
+      </div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how-it-works">How it works</a></li>
+      <li><a href="#download"><span class="btn-nav">Download Free</span></a></li>
+    </ul>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-glow-2"></div>
+    <div class="hero-content">
+      <div>
+        <div class="hero-badge">
+          🏸 Built for badminton clubs
+        </div>
+        <h1 class="hero-title">
+          Run your<br /><span>courts smarter.</span>
+        </h1>
+        <p class="hero-subtitle">
+          Queue Master handles your courts, queues, and player rotations in real time — so you can focus on the game, not the clipboard.
+        </p>
+        <div class="hero-cta">
+          <a href="#download" class="btn-primary">
+            📱 Download Free
+          </a>
+          <a href="#how-it-works" class="btn-secondary">
+            See how it works →
+          </a>
+        </div>
+        <div class="hero-stats">
+          <div class="hero-stat">
+            <span class="hero-stat-num">∞</span>
+            <span class="hero-stat-label">Players</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-num">0s</span>
+            <span class="hero-stat-label">Setup time</span>
+          </div>
+          <div class="hero-stat">
+            <span class="hero-stat-num">100%</span>
+            <span class="hero-stat-label">Free</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PHONE MOCKUP -->
+      <div class="hero-mockup">
+        <div class="phone">
+          <div class="phone-notch"></div>
+          <div class="phone-screen">
+            <div class="app-header">
+              <div>
+                <div class="app-header-title">QUEUE MASTER</div>
+              </div>
+              <div class="app-header-id">CLUB-ABC12</div>
+            </div>
+            <div class="court-grid">
+              <div class="court-card court-busy">
+                <div class="court-label">COURT 1</div>
+                <div class="court-players">ALEX &amp; BEN<br/>vs<br/>SARA &amp; MEG</div>
+              </div>
+              <div class="court-card court-free">
+                <div class="court-label">COURT 2</div>
+                <div class="court-free-text">FREE</div>
+              </div>
+              <div class="court-card court-busy">
+                <div class="court-label">COURT 3</div>
+                <div class="court-players">JAMIE &amp; LEE<br/>vs<br/>PRIYA &amp; TOM</div>
+              </div>
+              <div class="court-card court-free">
+                <div class="court-label">COURT 4</div>
+                <div class="court-free-text">FREE</div>
+              </div>
+            </div>
+            <div class="app-banner">
+              <div class="banner-next">NEXT: CHRIS</div>
+              <div class="banner-btn">MANAGE</div>
+            </div>
+            <div class="queue-item" style="border-color:#4A148C">
+              <div class="queue-num">1</div>
+              <div class="queue-dot" style="background:#4CAF50"></div>
+              <div class="queue-name">CHRIS</div>
+            </div>
+            <div class="queue-item">
+              <div class="queue-num">2</div>
+              <div class="queue-dot" style="background:#2196F3"></div>
+              <div class="queue-name">DANA</div>
+            </div>
+            <div class="queue-item">
+              <div class="queue-num">3</div>
+              <div class="queue-dot" style="background:#E91E63"></div>
+              <div class="queue-name">NINA</div>
+            </div>
+            <div class="queue-item">
+              <div class="queue-num">4</div>
+              <div class="queue-dot" style="background:#2196F3"></div>
+              <div class="queue-name">RAVI</div>
+            </div>
+          </div>
+        </div>
+        <div class="phone-float"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features" id="features">
+    <div class="section-inner">
+      <div class="features-header fade-in">
+        <div class="section-label">Everything you need</div>
+        <h2 class="section-title">One app. <span>Every session.</span></h2>
+        <p class="section-subtitle">From the first player arriving to the last match finishing — Queue Master has every part of your session covered.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card fade-in">
+          <span class="feature-icon">🎾</span>
+          <h3 class="feature-title">Live Court Tracking</h3>
+          <p class="feature-desc">See every court at a glance — who's playing, who's free, and who's up next. Tap a court to record the result and return players to the queue.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">🔢</span>
+          <h3 class="feature-title">Smart Queue</h3>
+          <p class="feature-desc">Players join by scanning a QR code. The host manages the order with pause, resume, and auto-pick. No spreadsheets, no arguments.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">📊</span>
+          <h3 class="feature-title">Player Profiles & Leaderboard</h3>
+          <p class="feature-desc">Every match is recorded. Track wins, games played, and win rate. A live leaderboard keeps the competition going between rallies.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">⚧️</span>
+          <h3 class="feature-title">Gender-Balanced Auto-Pick</h3>
+          <p class="feature-desc">Let the app pick the next four players automatically — with optional gender balancing and repeat-opponent avoidance built in.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">📱</span>
+          <h3 class="feature-title">Cross-Device Sync</h3>
+          <p class="feature-desc">Sign in with Google, Apple, or email and access your club from any phone. Real-time updates reach every player instantly via Supabase.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">🔔</span>
+          <h3 class="feature-title">Your Turn Alerts</h3>
+          <p class="feature-desc">Guests get a push notification, haptic buzz, and optional chime when it's their turn to pick a court — no more chasing people across the hall.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">🔐</span>
+          <h3 class="feature-title">Session Password</h3>
+          <p class="feature-desc">Lock your session with a password so only invited players can join. Ideal for club nights or private groups.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">📤</span>
+          <h3 class="feature-title">Share Session Stats</h3>
+          <p class="feature-desc">At the end of the session, share a formatted summary of matches played and top players directly to WhatsApp, messages, or any app.</p>
+        </div>
+        <div class="feature-card fade-in">
+          <span class="feature-icon">🖥️</span>
+          <h3 class="feature-title">Web Dashboard</h3>
+          <p class="feature-desc">On a tablet or laptop? Queue Master's web version shows courts and queue side by side, perfect for displaying on a screen at your venue.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-it-works" id="how-it-works">
+    <div class="section-inner">
+      <div class="fade-in" style="text-align:center; margin-bottom:0;">
+        <div class="section-label">Three simple steps</div>
+        <h2 class="section-title">Up and running in <span>under a minute.</span></h2>
+      </div>
+      <div class="steps">
+        <div class="step fade-in">
+          <div class="step-number">1</div>
+          <h3 class="step-title">Host creates a club</h3>
+          <p class="step-desc">Open the app, tap "Host a Session", and your club is live instantly. You'll get a unique Club ID and QR code to share with players.</p>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">2</div>
+          <h3 class="step-title">Players scan &amp; join</h3>
+          <p class="step-desc">Players scan the QR code or type the Club ID to join the queue from their own phone — no account needed, no app setup required.</p>
+        </div>
+        <div class="step fade-in">
+          <div class="step-number">3</div>
+          <h3 class="step-title">Assign courts &amp; play</h3>
+          <p class="step-desc">Tap four players, pick a free court, and they're off. Scores are recorded, players return to the back of the queue, and the cycle continues.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOR ANY CLUB -->
+  <section class="for-clubs">
+    <div class="section-inner">
+      <div class="fade-in" style="text-align:center; margin-bottom:0;">
+        <div class="section-label">Any venue, any format</div>
+        <h2 class="section-title">Built for clubs <span>of all sizes.</span></h2>
+      </div>
+      <div class="clubs-grid">
+        <div class="club-card fade-in">
+          <span class="club-card-icon">🏫</span>
+          <h3 class="club-card-title">School &amp; Uni Clubs</h3>
+          <p class="club-card-desc">Manage drop-in sessions with rotating groups of students. Fair, automatic, and no admin overhead.</p>
+        </div>
+        <div class="club-card fade-in">
+          <span class="club-card-icon">🏢</span>
+          <h3 class="club-card-title">Corporate &amp; Social</h3>
+          <p class="club-card-desc">Weekly office lunchtime sessions or social leagues — Queue Master keeps everyone moving and the scores on record.</p>
+        </div>
+        <div class="club-card fade-in">
+          <span class="club-card-icon">🏆</span>
+          <h3 class="club-card-title">Competitive Clubs</h3>
+          <p class="club-card-desc">Track long-term player stats, use the leaderboard to seed matches, and export CSVs for your records.</p>
+        </div>
+        <div class="club-card fade-in">
+          <span class="club-card-icon">🎉</span>
+          <h3 class="club-card-title">One-Off Events</h3>
+          <p class="club-card-desc">Tournaments, charity days, or mixed-ability sessions — spin up a club in seconds and delete it when you're done.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section class="testimonial-section">
+    <div class="section-inner">
+      <div class="fade-in" style="text-align:center;">
+        <div class="section-label">Early feedback</div>
+        <h2 class="section-title">Clubs love <span>Queue Master.</span></h2>
+      </div>
+      <div class="testimonial-grid">
+        <div class="testimonial-card fade-in">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"We used to spend the first 20 minutes every session arguing about whose turn it was. Now the app handles it and we just play."</p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">👤</div>
+            <div>
+              <div class="testimonial-name">Club Organiser</div>
+              <div class="testimonial-role">Wednesday Night Club · 30 members</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card fade-in">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"The QR code join is brilliant. Players just scan it when they arrive and they're in the queue. No messing around."</p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">👤</div>
+            <div>
+              <div class="testimonial-name">Sports Centre Coach</div>
+              <div class="testimonial-role">University Badminton Society</div>
+            </div>
+          </div>
+        </div>
+        <div class="testimonial-card fade-in">
+          <div class="testimonial-stars">★★★★★</div>
+          <p class="testimonial-text">"The leaderboard has made our sessions so much more competitive. Everyone's checking their win rate at the end of the night!"</p>
+          <div class="testimonial-author">
+            <div class="testimonial-avatar">👤</div>
+            <div>
+              <div class="testimonial-name">Club Captain</div>
+              <div class="testimonial-role">Friday Doubles · 4 courts</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section class="download" id="download">
+    <div class="section-inner">
+      <div class="fade-in">
+        <h2 class="section-title" style="text-align:center;">
+          Ready to run a<br /><span>smarter session?</span>
+        </h2>
+        <p class="section-subtitle" style="text-align:center;">
+          Queue Master is free to download. No subscription, no signup required for players — just scan and play.
+        </p>
+        <div class="download-buttons">
+          <a href="#" class="store-btn" id="app-store-btn">
+            <span class="store-btn-icon">🍎</span>
+            <div>
+              <span class="store-btn-sub">Download on the</span>
+              <span class="store-btn-main">App Store</span>
+            </div>
+          </a>
+          <a href="#" class="store-btn" id="play-store-btn">
+            <span class="store-btn-icon">▶</span>
+            <div>
+              <span class="store-btn-sub">Get it on</span>
+              <span class="store-btn-main">Google Play</span>
+            </div>
+          </a>
+          <a href="https://app.jastly.com" class="store-btn web-btn" target="_blank" rel="noopener">
+            <span class="store-btn-icon">🌐</span>
+            <div>
+              <span class="store-btn-sub">No download needed</span>
+              <span class="store-btn-main">Launch in Browser</span>
+            </div>
+          </a>
+        </div>
+        <p class="download-note">iOS &amp; Android · Free · No account needed for players · Or use in browser</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="nav-logo">
+            <span class="nav-logo-icon" style="font-size:28px">🏸</span>
+            <div>
+              <div class="nav-logo-text">Queue Master</div>
+              <div class="nav-logo-by">by Jastly</div>
+            </div>
+          </div>
+          <p class="footer-tagline">The smart queue management app for badminton clubs. Run your courts, not your admin.</p>
+        </div>
+        <div class="footer-links-group">
+          <div class="footer-links-col">
+            <h4>App</h4>
+            <ul>
+              <li><a href="#features">Features</a></li>
+              <li><a href="#how-it-works">How it works</a></li>
+              <li><a href="#download">Download</a></li>
+            </ul>
+          </div>
+          <div class="footer-links-col">
+            <h4>Support</h4>
+            <ul>
+              <li><a href="mailto:hello@jastly.com">Contact Us</a></li>
+              <li><a href="#">Privacy Policy</a></li>
+              <li><a href="#">Terms of Use</a></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div class="footer-copy">© 2026 Jastly. All rights reserved.</div>
+        <div class="footer-domains">
+          <a href="https://www.jastly.com" class="footer-domain">jastly.com</a>
+          <a href="https://www.jastly.co.uk" class="footer-domain">jastly.co.uk</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll fade-in animation
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry, i) => {
+        if (entry.isIntersecting) {
+          setTimeout(() => entry.target.classList.add('visible'), i * 80);
+          observer.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.1 });
+
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+    // Smooth nav background on scroll
+    window.addEventListener('scroll', () => {
+      document.querySelector('nav').style.background =
+        window.scrollY > 20
+          ? 'rgba(0,0,0,0.95)'
+          : 'rgba(0,0,0,0.85)';
+    });
+
+    // Coming soon for store buttons
+    ['app-store-btn', 'play-store-btn'].forEach(id => {
+      document.getElementById(id).addEventListener('click', (e) => {
+        e.preventDefault();
+        alert('Queue Master is coming soon to the ' + (id === 'app-store-btn' ? 'App Store' : 'Google Play') + '!');
+      });
+    });
+  </script>
+</body>
+</html>
