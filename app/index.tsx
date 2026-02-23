@@ -300,22 +300,22 @@ export default function WelcomeScreen() {
   // ─── Forgot Password ───────────────────────────────────────────────────────
   const handleForgotPassword = async () => {
     if (!authEmail.trim()) {
-      Alert.alert('Email Required', 'Enter your email address first, then tap "Send Reset Email".');
+      setAuthErrorMsg('Enter your email address first.');
       return;
     }
     setIsAuthLoading(true);
     try {
+      const redirectTo = Platform.OS === 'web'
+        ? 'https://app.jastly.com'
+        : Linking.createURL('/');
       const { error } = await supabase.auth.resetPasswordForEmail(
-        authEmail.trim().toLowerCase()
+        authEmail.trim().toLowerCase(),
+        { redirectTo }
       );
       if (error) throw error;
-      Alert.alert(
-        'Reset Email Sent',
-        'Check your inbox for a password reset link. Once reset, return here to sign in.',
-        [{ text: 'OK', onPress: () => switchAuthMode('signin') }]
-      );
+      setAuthErrorMsg('✅ Reset email sent — check your inbox and click the link.');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Could not send reset email. Try again.');
+      setAuthErrorMsg(e.message || 'Could not send reset email. Try again.');
     } finally {
       setIsAuthLoading(false);
     }
