@@ -153,6 +153,7 @@ export default function Dashboard() {
   const [showQR, setShowQR] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [showJoinQR, setShowJoinQR] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showStartup, setShowStartup] = useState(false);
   const [startupCourts, setStartupCourts] = useState(4);
   const [showMatchHistory, setShowMatchHistory] = useState(false);
@@ -456,6 +457,10 @@ export default function Dashboard() {
       setShowSportSetup(true);
     } else {
       setTempSport(club.sport);
+      // Skip startup modal for brand-new clubs (name set but no session data yet)
+      const hasHistory = (club.match_history as any[])?.length > 0;
+      const hasQueue = (club.waiting_list as any[])?.length > 0;
+      if (!hasHistory && !hasQueue) return; // fresh club — go straight to main UI
       setShowStartup(true);
     }
   }, [isHost, club]);
@@ -1146,15 +1151,23 @@ export default function Dashboard() {
   // ─── Club Logo ────────────────────────────────────────────────────────────
   const pickClubLogo = async () => {
     if (!isHost) return;
-    if (Platform.OS === 'web') { Alert.alert('Not available', 'Logo upload is not supported on web.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.7 });
     if (result.canceled) return;
-    const uri = result.assets[0].uri;
-    const ext = uri.split('.').pop() || 'jpg';
+    const asset = result.assets[0];
+    const uri = asset.uri;
+    const mimeType = asset.mimeType || 'image/jpeg';
+    const ext = mimeType.split('/')[1] || uri.split('.').pop() || 'jpg';
     const fileName = `logos/${cidRef.current}.${ext}`;
-    const formData = new FormData();
-    formData.append('file', { uri, name: fileName, type: `image/${ext}` } as any);
-    const { data: uploadData, error } = await supabase.storage.from('club-logos').upload(fileName, formData, { upsert: true });
+    let error: any;
+    if (Platform.OS === 'web') {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      ({ error } = await supabase.storage.from('club-logos').upload(fileName, blob, { contentType: mimeType, upsert: true }));
+    } else {
+      const formData = new FormData();
+      formData.append('file', { uri, name: fileName, type: mimeType } as any);
+      ({ error } = await supabase.storage.from('club-logos').upload(fileName, formData, { upsert: true }));
+    }
     if (error) { Alert.alert('Upload failed', error.message); return; }
     const { data: { publicUrl } } = supabase.storage.from('club-logos').getPublicUrl(fileName);
     await supabase.from('clubs').update({ club_logo_url: publicUrl }).eq('id', cidRef.current);
@@ -1343,6 +1356,9 @@ export default function Dashboard() {
           </View>
         </TouchableOpacity>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity style={[styles.settingsBtn, { marginRight: 4 }]} onPress={() => setShowHelp(true)}>
+            <Text style={{ fontSize: 18, color: colors.gray2, fontWeight: 'bold' }}>?</Text>
+          </TouchableOpacity>
           {isHost && (
             <TouchableOpacity style={styles.settingsBtn} onPress={openSettings}>
               <Text style={{ fontSize: 20 }}>⚙️</Text>
@@ -2064,6 +2080,7 @@ export default function Dashboard() {
                 onPress={() => Alert.alert('Sign Out', 'Sign out and return to the home screen?', [
                   { text: 'Cancel', style: 'cancel' },
                   { text: 'Sign Out', style: 'destructive', onPress: async () => {
+                    setShowSettings(false);
                     await supabase.auth.signOut().catch(() => {});
                     await AsyncStorage.multiRemove(['currentClubId', 'isHost', 'guestName']).catch(() => {});
                     router.replace('/');
@@ -2073,7 +2090,7 @@ export default function Dashboard() {
                 <Text style={[styles.btnText, { textAlign: 'center' }]}>SIGN OUT</Text>
               </TouchableOpacity>
 
-              {isEmailHost && (
+              {isHost && (
                 <TouchableOpacity
                   style={{ marginTop: 24, padding: 14, backgroundColor: colors.border, borderRadius: 8, alignItems: 'center' }}
                   onPress={async () => {
@@ -2099,6 +2116,133 @@ export default function Dashboard() {
               </View>
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── HELP MODAL ───────────────────────────────────────── */}
+      <Modal visible={showHelp} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <Text style={styles.modalTitle}>HOW TO USE QUEUE MASTER</Text>
+            <ScrollView showsVerticalScrollIndicator={false}>
+
+              {/* Section helper */}
+              {([
+                {
+                  emoji: '🏁', title: 'Starting a Session',
+                  items: [
+                    'When you open the app as a host, you\'ll be asked to choose your sport and number of active courts.',
+                    'Tap RESTORE to reload your last session\'s queue, or RESET for a fresh start.',
+                    'You can change sport, courts and other settings any time via the ⚙️ Settings button.',
+                  ],
+                },
+                {
+                  emoji: '👥', title: 'The Queue',
+                  items: [
+                    'Add players to the queue using the text input at the top — type a name and tap ADD.',
+                    'Tap a player\'s row to expand options: move up/down, mark as resting, or remove them.',
+                    'Players marked as resting are skipped by auto-pick and shown with a 💤 indicator.',
+                    'Drag the ☰ handle on a player\'s row to reorder the queue manually.',
+                    'The queue order determines who plays next — first players in line get priority.',
+                  ],
+                },
+                {
+                  emoji: '🎯', title: 'Selecting Players for a Court',
+                  items: [
+                    `Tap individual players in the queue to select them (highlighted in ${sportEmoji} colour).`,
+                    `Once you have the right number selected (depends on sport), tap ASSIGN COURT.`,
+                    'Or use AUTO-PICK to let the app choose players automatically from the top of the queue.',
+                    'Auto-pick respects gender balance when enabled in Settings.',
+                  ],
+                },
+                {
+                  emoji: '🏟️', title: `${courtLabel}s`,
+                  items: [
+                    `Active ${courtLabel.toLowerCase()}s are shown below the queue.`,
+                    `Each ${courtLabel.toLowerCase()} shows who is currently playing and when they started.`,
+                    `Tap a ${courtLabel.toLowerCase()} card to finish the match — players are sent back to the queue.`,
+                    'The winner team can be selected when finishing a match, updating the leaderboard.',
+                    `You can add or remove ${courtLabel.toLowerCase()}s in Settings.`,
+                  ],
+                },
+                {
+                  emoji: '📋', title: 'Player Roster',
+                  items: [
+                    'The roster stores your regular players so you can add them quickly each session.',
+                    'Tap ROSTER to open it — add new players or tap a name to instantly add them to the queue.',
+                    'Player stats (games played, wins) are tracked per sport.',
+                    'You can delete players from the roster by tapping their entry.',
+                  ],
+                },
+                {
+                  emoji: '🏆', title: 'Leaderboard',
+                  items: [
+                    'Tap LEADERBOARD to see win rates for all players in your roster.',
+                    'Stats are based on match history from your current club.',
+                    'Use EXPORT STATS to share a summary of the session.',
+                  ],
+                },
+                {
+                  emoji: '📱', title: 'Guest Joining',
+                  items: [
+                    'Guests don\'t need an account — they just need your Club ID.',
+                    'Tap your club name / ID at the top to show the QR code.',
+                    'Guests scan the QR code or enter the Club ID manually on the join screen.',
+                    'Once joined, guests see a live read-only view of the queue and their position.',
+                    'Set a join password in Settings to prevent unauthorised access.',
+                  ],
+                },
+                {
+                  emoji: '🔊', title: 'Announcements (TTS)',
+                  items: [
+                    'When a match starts the app reads out the players and court number.',
+                    'Toggle sound on/off with the 🔊 button. Enable/disable TTS in Settings.',
+                    'Repeat announcements: automatically re-read the announcement at set intervals.',
+                    'Countdown: counts down seconds before reading the announcement.',
+                  ],
+                },
+                {
+                  emoji: '⚙️', title: 'Settings',
+                  items: [
+                    'Sport — change the sport for your club (affects player count, terminology).',
+                    'Active courts — increase or decrease how many courts are in play.',
+                    'Club name & password — rename your club or require a password to join.',
+                    'Gender balance — auto-pick tries to split teams evenly by gender.',
+                    'Avoid repeats — auto-pick avoids pairing players who just played together.',
+                    'PIN lock — require a PIN to access host controls.',
+                    'Dark / light mode — toggle the app theme.',
+                  ],
+                },
+                {
+                  emoji: '🗑️', title: 'Full Wipe',
+                  items: [
+                    'Full Wipe (in Settings) clears the queue, courts, and match history.',
+                    'Player roster and club settings are kept.',
+                    'Use this at the start of a new session to reset everything.',
+                  ],
+                },
+              ] as { emoji: string; title: string; items: string[] }[]).map((section) => (
+                <View key={section.title} style={{ marginBottom: 22 }}>
+                  <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 15, marginBottom: 8 }}>
+                    {section.emoji}  {section.title}
+                  </Text>
+                  {section.items.map((item, i) => (
+                    <View key={i} style={{ flexDirection: 'row', marginBottom: 5 }}>
+                      <Text style={{ color: colors.gray2, marginRight: 6, marginTop: 1 }}>•</Text>
+                      <Text style={{ color: colors.gray1, fontSize: 13, flex: 1, lineHeight: 19 }}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+
+              <TouchableOpacity
+                style={[styles.btnPrimary, { marginTop: 8 }]}
+                onPress={() => setShowHelp(false)}
+              >
+                <Text style={[styles.btnText, { textAlign: 'center' }]}>GOT IT</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
         </View>
       </Modal>
 

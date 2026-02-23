@@ -21,7 +21,7 @@ import {
 } from 'react-native';
 import { supabase } from '../supabase';
 import { ColorSet, useTheme } from '../contexts/theme-context';
-import { getSportConfig } from '../constants/sports';
+import { getSportConfig, SPORTS } from '../constants/sports';
 
 // Required to complete the OAuth redirect back into the app
 WebBrowser.maybeCompleteAuthSession();
@@ -67,6 +67,9 @@ export default function WelcomeScreen() {
   // Multi-club picker
   const [myClubs, setMyClubs] = useState<MyClub[]>([]);
   const [showClubPicker, setShowClubPicker] = useState(false);
+  const [showNewClubForm, setShowNewClubForm] = useState(false);
+  const [newClubName, setNewClubName] = useState('');
+  const [newClubSport, setNewClubSport] = useState('badminton');
 
   // Password recovery (from reset email link)
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -369,6 +372,7 @@ export default function WelcomeScreen() {
 
   const createNewClub = async () => {
     // TODO: PREMIUM — free tier should be limited to 1 club
+    if (!newClubName.trim()) { Alert.alert('Club name required', 'Please enter a name for your new club.'); return; }
     setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -377,11 +381,17 @@ export default function WelcomeScreen() {
       const newClubId = 'CLUB-' +
         Math.random().toString(36).substring(2, 7).toUpperCase() +
         Math.random().toString(36).substring(2, 7).toUpperCase();
-      const { error } = await supabase.from('clubs').insert([{ id: newClubId, host_uid: uid }]);
+      const { error } = await supabase.from('clubs').insert([{
+        id: newClubId, host_uid: uid,
+        club_name: newClubName.trim(), sport: newClubSport,
+      }]);
       if (error) { Alert.alert('Error', error.message); setIsLoading(false); return; }
       await AsyncStorage.setItem('currentClubId', newClubId);
       await AsyncStorage.setItem('isHost', 'true');
       setShowClubPicker(false);
+      setShowNewClubForm(false);
+      setNewClubName('');
+      setNewClubSport('badminton');
       router.replace('/dashboard');
     } finally {
       setIsLoading(false);
@@ -680,11 +690,9 @@ export default function WelcomeScreen() {
             onChangeText={setClubId}
             autoCapitalize="characters"
           />
-          {Platform.OS !== 'web' && (
-            <TouchableOpacity style={styles.scanBtn} onPress={openScanner}>
-              <Text style={{ fontSize: 22 }}>📷</Text>
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity style={styles.scanBtn} onPress={openScanner}>
+            <Text style={{ fontSize: 22 }}>📷</Text>
+          </TouchableOpacity>
         </View>
 
         <TextInput
@@ -915,75 +923,118 @@ export default function WelcomeScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── QR SCANNER MODAL (native only — camera not available on web) ── */}
-      {Platform.OS !== 'web' && (
-        <Modal visible={showScanner} animationType="slide">
-          <View style={{ flex: 1, backgroundColor: colors.bg }}>
-            <View style={{ padding: 20, paddingTop: 60, backgroundColor: colors.bg, flexDirection: 'row', alignItems: 'center' }}>
-              <Text style={{ color: colors.primary, fontSize: 18, fontWeight: 'bold', flex: 1 }}>SCAN CLUB QR CODE</Text>
-              <TouchableOpacity onPress={() => setShowScanner(false)}>
-                <Text style={{ color: colors.white, fontSize: 28, lineHeight: 28 }}>×</Text>
-              </TouchableOpacity>
-            </View>
-            <CameraView
-              style={{ flex: 1 }}
-              facing="back"
-              barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-              onBarcodeScanned={handleBarcodeScan}
-            />
-            <View style={{ padding: 30, backgroundColor: colors.bg, alignItems: 'center' }}>
-              <Text style={{ color: colors.gray2, textAlign: 'center' }}>
-                Point your camera at the club's QR code
-              </Text>
-            </View>
+      {/* ── QR SCANNER MODAL ── */}
+      <Modal visible={showScanner} animationType="slide">
+        <View style={{ flex: 1, backgroundColor: colors.bg }}>
+          <View style={{ padding: 20, paddingTop: 60, backgroundColor: colors.bg, flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ color: colors.primary, fontSize: 18, fontWeight: 'bold', flex: 1 }}>SCAN CLUB QR CODE</Text>
+            <TouchableOpacity onPress={() => setShowScanner(false)}>
+              <Text style={{ color: colors.white, fontSize: 28, lineHeight: 28 }}>×</Text>
+            </TouchableOpacity>
           </View>
-        </Modal>
-      )}
+          <CameraView
+            style={{ flex: 1 }}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={handleBarcodeScan}
+          />
+          <View style={{ padding: 30, backgroundColor: colors.bg, alignItems: 'center' }}>
+            <Text style={{ color: colors.gray2, textAlign: 'center' }}>
+              Point your camera at the club's QR code
+            </Text>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── MY CLUBS PICKER MODAL ── */}
       <Modal visible={showClubPicker} animationType="slide" transparent>
         <View style={styles.authOverlay}>
           <View style={[styles.authSheet, { paddingBottom: 30 }]}>
-            <Text style={styles.authTitle}>MY CLUBS</Text>
-            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 16, fontSize: 13 }}>
-              Choose a club to manage or create a new one.
-            </Text>
-            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
-              {myClubs.map((c) => {
-                const sc = getSportConfig(c.sport);
-                return (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={{
-                      backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1,
-                      borderColor: colors.border, padding: 14, marginBottom: 10,
-                      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-                    }}
-                    onPress={() => selectClub(c.id)}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 15 }}>
-                        {sc.emoji}  {c.club_name || `My ${sc.label} Club`}
+            {showNewClubForm ? (
+              <>
+                <Text style={styles.authTitle}>NEW CLUB</Text>
+                <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 20, fontSize: 13 }}>
+                  Give your club a name and choose a sport.
+                </Text>
+                <TextInput
+                  style={[styles.input, { marginBottom: 16 }]}
+                  placeholder="Club name (e.g. Tuesday Badminton)"
+                  placeholderTextColor={colors.gray3}
+                  value={newClubName}
+                  onChangeText={setNewClubName}
+                />
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+                  {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
+                    <TouchableOpacity
+                      key={key}
+                      onPress={() => setNewClubSport(key)}
+                      style={{
+                        paddingHorizontal: 14, paddingVertical: 10, marginRight: 8,
+                        borderRadius: 8, borderWidth: 1,
+                        borderColor: newClubSport === key ? colors.primary : colors.border,
+                        backgroundColor: newClubSport === key ? colors.primary + '22' : colors.surface,
+                      }}
+                    >
+                      <Text style={{ color: newClubSport === key ? colors.primary : colors.white, fontSize: 13 }}>
+                        {s.emoji} {s.label}
                       </Text>
-                      <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 3 }}>
-                        ID: {c.id}  •  {c.active_courts || 4} {sc.court.toLowerCase()}s
-                      </Text>
-                    </View>
-                    <Text style={{ color: colors.primary, fontSize: 20 }}>▶</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity
-              style={[styles.hostButton, { marginTop: 12, opacity: isLoading ? 0.5 : 1 }]}
-              onPress={createNewClub}
-              disabled={isLoading}
-            >
-              {isLoading
-                ? <ActivityIndicator color={colors.black} />
-                : <Text style={styles.btnText}>+ CREATE NEW CLUB</Text>
-              }
-            </TouchableOpacity>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.hostButton, { opacity: isLoading ? 0.5 : 1 }]}
+                  onPress={createNewClub}
+                  disabled={isLoading}
+                >
+                  {isLoading
+                    ? <ActivityIndicator color={colors.black} />
+                    : <Text style={styles.btnText}>CREATE CLUB</Text>
+                  }
+                </TouchableOpacity>
+                <TouchableOpacity style={{ marginTop: 14, alignItems: 'center' }} onPress={() => setShowNewClubForm(false)}>
+                  <Text style={{ color: colors.gray2 }}>← Back to my clubs</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.authTitle}>MY CLUBS</Text>
+                <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 16, fontSize: 13 }}>
+                  Choose a club to manage or create a new one.
+                </Text>
+                <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+                  {myClubs.map((c) => {
+                    const sc = getSportConfig(c.sport);
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={{
+                          backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1,
+                          borderColor: colors.border, padding: 14, marginBottom: 10,
+                          flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                        }}
+                        onPress={() => selectClub(c.id)}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 15 }}>
+                            {sc.emoji}  {c.club_name || `My ${sc.label} Club`}
+                          </Text>
+                          <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 3 }}>
+                            ID: {c.id}  •  {c.active_courts || 4} {sc.court.toLowerCase()}s
+                          </Text>
+                        </View>
+                        <Text style={{ color: colors.primary, fontSize: 20 }}>▶</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.hostButton, { marginTop: 12 }]}
+                  onPress={() => setShowNewClubForm(true)}
+                >
+                  <Text style={styles.btnText}>+ CREATE NEW CLUB</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
