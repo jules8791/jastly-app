@@ -41,5 +41,6 @@ export interface Club {
   gender_balanced: boolean;
   avoid_repeats: boolean;
   power_guest_pin: string | null;
+  has_power_guest_pin?: boolean; // generated column — use this for display logic instead of power_guest_pin
   sport?: string | null;
 }

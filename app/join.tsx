@@ -31,13 +31,16 @@ export default function JoinScreen() {
   useEffect(() => {
     if (!clubId) { router.replace('/'); return; }
     AsyncStorage.getItem('guestName').then(saved => { if (saved) setName(saved); });
-    supabase.from('clubs').select('id, club_name, join_password').eq('id', clubId).maybeSingle()
-      .then(({ data }) => {
-        if (!data) { Alert.alert('Club Not Found', 'No club found with that ID.'); router.replace('/'); return; }
-        setClubName(data.club_name || clubId);
-        setNeedsPassword(!!data.join_password);
-        setIsLoading(false);
-      });
+    // Check if club exists and requires password — server-side only, hash never sent to client
+    Promise.all([
+      supabase.from('clubs').select('id, club_name').eq('id', clubId).maybeSingle(),
+      supabase.rpc('validate_join_password', { p_club_id: clubId, p_password_hash: '' }),
+    ]).then(([{ data }, { data: rpc }]) => {
+      if (!data) { Alert.alert('Club Not Found', 'No club found with that ID.'); router.replace('/'); return; }
+      setClubName(data.club_name || clubId);
+      setNeedsPassword(!!(rpc as any)?.requires_password);
+      setIsLoading(false);
+    });
   }, [clubId]);
 
   const hashPassword = (pw: string): Promise<string> =>
@@ -50,20 +53,21 @@ export default function JoinScreen() {
 
     setIsLoading(true);
     try {
+      // Validate password server-side — hash never exposed to client
+      if (needsPassword) {
+        if (!password.trim()) { Alert.alert('Password Required', 'This club requires a password.'); setIsLoading(false); return; }
+        const hash = await hashPassword(password.trim());
+        const { data: rpc } = await supabase.rpc('validate_join_password', { p_club_id: clubId, p_password_hash: hash });
+        if (!(rpc as any)?.valid) { Alert.alert('Wrong Password', 'Incorrect password.'); setIsLoading(false); return; }
+      }
+
       const { data: club, error } = await supabase
         .from('clubs')
-        .select('id, club_name, join_password, waiting_list, court_occupants')
+        .select('id, club_name, waiting_list, court_occupants')
         .eq('id', clubId)
         .maybeSingle();
 
       if (error || !club) { Alert.alert('Not Found', 'Club no longer exists.'); router.replace('/'); return; }
-
-      if (club.join_password) {
-        if (!password.trim()) { Alert.alert('Password Required', 'This club requires a password.'); setIsLoading(false); return; }
-        if (await hashPassword(password.trim()) !== club.join_password) {
-          Alert.alert('Wrong Password', 'Incorrect password.'); setIsLoading(false); return;
-        }
-      }
 
       const inQueue = (club.waiting_list || []).some((p: any) => p.name === cleanName);
       const onCourt = Object.values(club.court_occupants || {}).flat().some((p: any) => (p as any).name === cleanName);

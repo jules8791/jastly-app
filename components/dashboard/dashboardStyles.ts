@@ -1,0 +1,48 @@
+import { StyleSheet } from 'react-native';
+import { ColorSet } from '../../contexts/theme-context';
+
+export const makeStyles = (C: ColorSet) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: C.bg, paddingTop: 50 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { padding: 15, backgroundColor: C.primary, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontWeight: 'bold', color: C.black, fontSize: 18 },
+  idText: { color: C.black, fontSize: 10, fontWeight: 'bold' },
+  settingsBtn: { marginRight: 15, padding: 5 },
+  courtBusy: { backgroundColor: C.redDark, borderColor: C.red },
+  courtFree: { backgroundColor: C.surface, borderColor: C.border, justifyContent: 'center' },
+  courtTitle: { color: C.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
+  courtPlayer: { color: C.white, fontWeight: 'bold', textAlign: 'center' },
+  courtFreeText: { color: C.green, textAlign: 'center', fontWeight: 'bold' },
+  banner: { backgroundColor: C.surface, padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border },
+  nextText: { color: C.primary, fontWeight: 'bold', fontSize: 14 },
+  btnPrimary: { backgroundColor: C.purple, padding: 10, borderRadius: 6 },
+  btnPrimaryText: { color: C.white, fontSize: 10, fontWeight: 'bold', backgroundColor: C.border, padding: 5, borderRadius: 4, width: 100, textAlign: 'center' },
+  btnDanger: { backgroundColor: C.red, padding: 8, borderRadius: 6 },
+  btnText: { color: C.white, fontWeight: 'bold', fontSize: 12, textAlign: 'center' },
+  mathBtn: { backgroundColor: C.border, paddingHorizontal: 15, paddingVertical: 5, borderRadius: 5 },
+  sportChip: {
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, marginRight: 8, minWidth: 72,
+  },
+  sportChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  queueRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: C.surface, marginBottom: 5, borderRadius: 8, alignItems: 'center' },
+  pName: { color: C.white, fontSize: 16, fontWeight: 'bold' },
+  genderBadge: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
+  label: { color: C.gray2, fontSize: 12, marginBottom: 5 },
+  sectionHeader: { color: C.primary, fontWeight: 'bold', marginTop: 20, marginBottom: 10, fontSize: 13, letterSpacing: 1 },
+  settingsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8 },
+  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: C.overlay, justifyContent: 'center', padding: 20, zIndex: 10 },
+  modalContent: { backgroundColor: C.surface, padding: 20, borderRadius: 10, borderWidth: 1, borderColor: C.border },
+  modalTitle: { color: C.primary, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', fontSize: 16 },
+  modalItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: C.borderSoft },
+  input: { backgroundColor: C.bg, color: C.white, padding: 15, borderRadius: 5, marginBottom: 15, borderWidth: 1, borderColor: C.border },
+  fullModalOverlay: { flex: 1, backgroundColor: C.overlayLight, justifyContent: 'flex-end' },
+  fullModalContent: { backgroundColor: C.surfaceHigh, height: '90%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.border, paddingBottom: 15 },
+  rosterRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.borderSoft, alignItems: 'center' },
+  genderBtn: { padding: 15, borderWidth: 1, borderColor: C.gray3, borderRadius: 8, marginHorizontal: 10, width: 120, alignItems: 'center' },
+  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: C.gray2, borderRadius: 4, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
+});
+
+export type DashboardStyles = ReturnType<typeof makeStyles>;

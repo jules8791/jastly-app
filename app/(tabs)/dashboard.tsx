@@ -50,15 +50,31 @@ import { Audio } from 'expo-av';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, AppState, Image, Modal, Platform, ScrollView,
-  Share, StyleSheet, Switch, Text, TextInput,
+  Share, Switch, Text, TextInput,
   TouchableOpacity, useWindowDimensions, View,
 } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
-import { ColorSet } from '../../contexts/theme-context';
 import { useTheme } from '../../contexts/theme-context';
 import { supabase } from '../../supabase';
 import { Club, CourtResult, Player, QueuePlayer } from '../../types';
 import { getSportConfig, SPORTS } from '../../constants/sports';
+import { makeStyles } from '../../components/dashboard/dashboardStyles';
+import {
+  ClubQRModal,
+  LeaderboardModal,
+  MatchHistoryModal,
+  SystemLogsModal,
+  HelpModal,
+  PlayerProfileModal,
+} from '../../components/dashboard/InfoModals';
+import {
+  CourtAssignModal,
+  MatchResultModal,
+  SubstituteModal,
+  SetupPinModal,
+  EnterPinModal,
+  SportSetupModal,
+  SessionStartupModal,
+} from '../../components/dashboard/ActionModals';
 
 // Configure local notifications
 Notifications.setNotificationHandler({
@@ -1005,7 +1021,7 @@ export default function Dashboard() {
     setTempGenderBalanced(genderBalanced);
     setTempAvoidRepeats(avoidRepeats);
     setTempClubPassword(''); // never pre-fill with stored hash
-    setTempPowerGuestEnabled(!!(club.power_guest_pin));
+    setTempPowerGuestEnabled(!!(club.has_power_guest_pin ?? club.power_guest_pin));
     setTempSoundEnabled(soundEnabled);
     setTempSport(club.sport || 'badminton');
     setShowSettings(true);
@@ -1069,9 +1085,9 @@ export default function Dashboard() {
   };
 
   const claimPowerGuest = async () => {
-    if (!powerGuestPinInput.trim() || !club?.power_guest_pin) return;
+    if (!powerGuestPinInput.trim() || !(club?.has_power_guest_pin ?? club?.power_guest_pin)) return;
     // Compute only the hash portion using the salt from the stored value
-    const stored = club.power_guest_pin;
+    const stored = club.power_guest_pin ?? '';
     const colonIdx = stored.indexOf(':');
     let pgPinHash: string;
     if (colonIdx !== -1) {
@@ -1322,7 +1338,7 @@ export default function Dashboard() {
       )}
 
       {/* ── POWER GUEST CLAIM BUTTON (guest only, when club has pg PIN set) ── */}
-      {!isHost && !isPowerGuest && club?.power_guest_pin && (
+      {!isHost && !isPowerGuest && (club?.has_power_guest_pin ?? club?.power_guest_pin) && (
         <TouchableOpacity
           style={{ backgroundColor: colors.deepBlue, padding: 10, alignItems: 'center' }}
           onPress={() => { setPowerGuestPinInput(''); setShowPowerGuestPrompt(true); }}
@@ -1791,68 +1807,15 @@ export default function Dashboard() {
       {/* ==================================================================
           PLAYER PROFILE MODAL
       ================================================================== */}
-      <Modal visible={!!showPlayerProfile} animationType="fade" transparent onRequestClose={() => setShowPlayerProfile(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { minWidth: 260 }]}>
-            {showPlayerProfile && (() => {
-              const p: Player = showPlayerProfile;
-              const winRate = p.games > 0 ? Math.round((p.wins / p.games) * 100) : 0;
-              const queuePos = (club?.waiting_list || []).findIndex((w: any) => w.name === p.name && !w.isResting);
-              const onCourt = Object.entries(club?.court_occupants || {}).find(([, players]) =>
-                (players as any[]).some((pl: any) => pl.name === p.name)
-              );
-              return (
-                <>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                    <View style={[styles.genderBadge, { backgroundColor: p.gender === 'F' ? colors.pink : colors.blue, width: 28, height: 28, borderRadius: 14, marginRight: 12 }]}>
-                      <Text style={{ color: colors.white, fontSize: 14, fontWeight: 'bold' }}>{p.gender || 'M'}</Text>
-                    </View>
-                    <Text style={[styles.modalTitle, { marginBottom: 0, flex: 1 }]}>{p.name}</Text>
-                    <TouchableOpacity onPress={() => setShowPlayerProfile(null)} style={{ paddingLeft: 10 }}>
-                      <Text style={{ color: colors.white, fontSize: 28, fontWeight: 'bold', lineHeight: 28 }}>×</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={{ backgroundColor: colors.border, borderRadius: 8, padding: 14, marginBottom: 12 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ color: colors.primary, fontSize: 28, fontWeight: 'bold' }}>{p.games || 0}</Text>
-                        <Text style={{ color: colors.gray2, fontSize: 11 }}>GAMES</Text>
-                      </View>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ color: colors.green, fontSize: 28, fontWeight: 'bold' }}>{p.wins || 0}</Text>
-                        <Text style={{ color: colors.gray2, fontSize: 11 }}>WINS</Text>
-                      </View>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ color: colors.primary, fontSize: 28, fontWeight: 'bold' }}>{winRate}%</Text>
-                        <Text style={{ color: colors.gray2, fontSize: 11 }}>WIN RATE</Text>
-                      </View>
-                    </View>
-                  </View>
-
-                  <View style={{ marginBottom: 8 }}>
-                    {onCourt ? (
-                      <Text style={{ color: colors.green, textAlign: 'center', fontWeight: 'bold' }}>
-                        {sportEmoji} Playing on {courtLabel} {parseInt(onCourt[0]) + 1}
-                      </Text>
-                    ) : queuePos >= 0 ? (
-                      <Text style={{ color: colors.primary, textAlign: 'center', fontWeight: 'bold' }}>
-                        #{queuePos + 1} in queue
-                      </Text>
-                    ) : (
-                      <Text style={{ color: colors.gray2, textAlign: 'center' }}>Not currently in queue</Text>
-                    )}
-                  </View>
-
-                  <TouchableOpacity style={[styles.btnPrimary, { marginTop: 10, padding: 12 }]} onPress={() => setShowPlayerProfile(null)}>
-                    <Text style={[styles.btnText, { textAlign: 'center' }]}>CLOSE</Text>
-                  </TouchableOpacity>
-                </>
-              );
-            })()}
-          </View>
-        </View>
-      </Modal>
+      <PlayerProfileModal
+        visible={!!showPlayerProfile}
+        player={showPlayerProfile}
+        courtOccupants={club.court_occupants || {}}
+        waitingList={club.waiting_list || []}
+        sportEmoji={sportEmoji}
+        courtLabel={courtLabel}
+        onClose={() => setShowPlayerProfile(null)}
+      />
 
       {/* ==================================================================
           SETTINGS MODAL
@@ -2120,581 +2083,175 @@ export default function Dashboard() {
       </Modal>
 
       {/* ── HELP MODAL ───────────────────────────────────────── */}
-      <Modal visible={showHelp} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
-            <Text style={styles.modalTitle}>HOW TO USE QUEUE MASTER</Text>
-            <ScrollView showsVerticalScrollIndicator={false}>
-
-              {/* Section helper */}
-              {([
-                {
-                  emoji: '🏁', title: 'Starting a Session',
-                  items: [
-                    'When you open the app as a host, you\'ll be asked to choose your sport and number of active courts.',
-                    'Tap RESTORE to reload your last session\'s queue, or RESET for a fresh start.',
-                    'You can change sport, courts and other settings any time via the ⚙️ Settings button.',
-                  ],
-                },
-                {
-                  emoji: '👥', title: 'The Queue',
-                  items: [
-                    'Add players to the queue using the text input at the top — type a name and tap ADD.',
-                    'Tap a player\'s row to expand options: move up/down, mark as resting, or remove them.',
-                    'Players marked as resting are skipped by auto-pick and shown with a 💤 indicator.',
-                    'Drag the ☰ handle on a player\'s row to reorder the queue manually.',
-                    'The queue order determines who plays next — first players in line get priority.',
-                  ],
-                },
-                {
-                  emoji: '🎯', title: 'Selecting Players for a Court',
-                  items: [
-                    `Tap individual players in the queue to select them (highlighted in ${sportEmoji} colour).`,
-                    `Once you have the right number selected (depends on sport), tap ASSIGN COURT.`,
-                    'Or use AUTO-PICK to let the app choose players automatically from the top of the queue.',
-                    'Auto-pick respects gender balance when enabled in Settings.',
-                  ],
-                },
-                {
-                  emoji: '🏟️', title: `${courtLabel}s`,
-                  items: [
-                    `Active ${courtLabel.toLowerCase()}s are shown below the queue.`,
-                    `Each ${courtLabel.toLowerCase()} shows who is currently playing and when they started.`,
-                    `Tap a ${courtLabel.toLowerCase()} card to finish the match — players are sent back to the queue.`,
-                    'The winner team can be selected when finishing a match, updating the leaderboard.',
-                    `You can add or remove ${courtLabel.toLowerCase()}s in Settings.`,
-                  ],
-                },
-                {
-                  emoji: '📋', title: 'Player Roster',
-                  items: [
-                    'The roster stores your regular players so you can add them quickly each session.',
-                    'Tap ROSTER to open it — add new players or tap a name to instantly add them to the queue.',
-                    'Player stats (games played, wins) are tracked per sport.',
-                    'You can delete players from the roster by tapping their entry.',
-                  ],
-                },
-                {
-                  emoji: '🏆', title: 'Leaderboard',
-                  items: [
-                    'Tap LEADERBOARD to see win rates for all players in your roster.',
-                    'Stats are based on match history from your current club.',
-                    'Use EXPORT STATS to share a summary of the session.',
-                  ],
-                },
-                {
-                  emoji: '📱', title: 'Guest Joining',
-                  items: [
-                    'Guests don\'t need an account — they just need your Club ID.',
-                    'Tap your club name / ID at the top to show the QR code.',
-                    'Guests scan the QR code or enter the Club ID manually on the join screen.',
-                    'Once joined, guests see a live read-only view of the queue and their position.',
-                    'Set a join password in Settings to prevent unauthorised access.',
-                  ],
-                },
-                {
-                  emoji: '🔊', title: 'Announcements (TTS)',
-                  items: [
-                    'When a match starts the app reads out the players and court number.',
-                    'Toggle sound on/off with the 🔊 button. Enable/disable TTS in Settings.',
-                    'Repeat announcements: automatically re-read the announcement at set intervals.',
-                    'Countdown: counts down seconds before reading the announcement.',
-                  ],
-                },
-                {
-                  emoji: '⚙️', title: 'Settings',
-                  items: [
-                    'Sport — change the sport for your club (affects player count, terminology).',
-                    'Active courts — increase or decrease how many courts are in play.',
-                    'Club name & password — rename your club or require a password to join.',
-                    'Gender balance — auto-pick tries to split teams evenly by gender.',
-                    'Avoid repeats — auto-pick avoids pairing players who just played together.',
-                    'PIN lock — require a PIN to access host controls.',
-                    'Dark / light mode — toggle the app theme.',
-                  ],
-                },
-                {
-                  emoji: '🗑️', title: 'Full Wipe',
-                  items: [
-                    'Full Wipe (in Settings) clears the queue, courts, and match history.',
-                    'Player roster and club settings are kept.',
-                    'Use this at the start of a new session to reset everything.',
-                  ],
-                },
-              ] as { emoji: string; title: string; items: string[] }[]).map((section) => (
-                <View key={section.title} style={{ marginBottom: 22 }}>
-                  <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 15, marginBottom: 8 }}>
-                    {section.emoji}  {section.title}
-                  </Text>
-                  {section.items.map((item, i) => (
-                    <View key={i} style={{ flexDirection: 'row', marginBottom: 5 }}>
-                      <Text style={{ color: colors.gray2, marginRight: 6, marginTop: 1 }}>•</Text>
-                      <Text style={{ color: colors.gray1, fontSize: 13, flex: 1, lineHeight: 19 }}>{item}</Text>
-                    </View>
-                  ))}
-                </View>
-              ))}
-
-              <TouchableOpacity
-                style={[styles.btnPrimary, { marginTop: 8 }]}
-                onPress={() => setShowHelp(false)}
-              >
-                <Text style={[styles.btnText, { textAlign: 'center' }]}>GOT IT</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      <HelpModal
+        visible={showHelp}
+        sportEmoji={sportEmoji}
+        courtLabel={courtLabel}
+        onClose={() => setShowHelp(false)}
+      />
 
       {/* ── COURTS ASSIGNMENT MODAL ──────────────────────────── */}
-      <Modal visible={showCourts} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>ASSIGN COURT</Text>
-
-            {/* Selected players summary */}
-            {selectedQueueIdx.length === 4 && (
-              <View style={{ backgroundColor: colors.selectedBg, borderRadius: 8, padding: 10, marginBottom: 14 }}>
-                <Text style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginBottom: 4 }}>SELECTED PLAYERS</Text>
-                <Text style={{ color: colors.primary, fontWeight: 'bold', textAlign: 'center', fontSize: 13 }}>
-                  {selectedQueueIdx.map(i => club.waiting_list[i]?.name).join('  ·  ')}
-                </Text>
-              </View>
-            )}
-
-            {/* Court list */}
-            {Array.from({ length: club.active_courts || 4 }).map((_, i) => {
-              const isBusy = !!club.court_occupants?.[i.toString()];
-              return (
-                <TouchableOpacity
-                  key={i}
-                  disabled={isBusy || isProcessingAction}
-                  style={[styles.modalItem, (isBusy || isProcessingAction) && { opacity: 0.3 }]}
-                  onPress={() => assignCourt(i)}
-                >
-                  <Text style={{ color: colors.white, fontWeight: 'bold' }}>{courtLabel} {i + 1}</Text>
-                  <Text style={{ color: isBusy ? colors.red : colors.green, fontWeight: 'bold' }}>
-                    {isProcessingAction ? 'ASSIGNING...' : isBusy ? 'BUSY' : 'FREE — TAP TO ASSIGN'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-
-            {/* Cancel */}
-            <TouchableOpacity
-              style={[styles.btnDanger, { marginTop: 16, backgroundColor: colors.gray3 }]}
-              onPress={() => { setShowCourts(false); setSelectedQueueIdx([]); }}
-            >
-              <Text style={[styles.btnText, { textAlign: 'center' }]}>CANCEL — CHANGE SELECTION</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <CourtAssignModal
+        visible={showCourts}
+        selectedQueueIdx={selectedQueueIdx}
+        waitingList={club.waiting_list || []}
+        activeCourts={club.active_courts || 4}
+        courtOccupants={club.court_occupants || {}}
+        courtLabel={courtLabel}
+        isProcessingAction={isProcessingAction}
+        onAssignCourt={assignCourt}
+        onCancel={() => { setShowCourts(false); setSelectedQueueIdx([]); }}
+      />
 
       {/* ── MATCH RESULTS MODAL ──────────────────────────────── */}
-      <Modal visible={!!showResult} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>WHO WON?</Text>
-            {(showResult?.players || []).map((p, i) => (
-              <TouchableOpacity key={i} style={styles.modalItem} onPress={() => {
-                if (winners.includes(p.name)) setWinners(winners.filter(w => w !== p.name));
-                else if (winners.length < 2) setWinners([...winners, p.name]);
-                else Alert.alert('Max 2 winners', 'Deselect one first.');
-              }}>
-                <Text style={{ color: colors.white }}>{p.name}</Text>
-                <Text style={{ color: winners.includes(p.name) ? colors.primary : colors.gray4, fontWeight: 'bold' }}>WINNER</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={[styles.btnPrimary, { marginTop: 20, padding: 14 }]} onPress={finishMatch}>
-              <Text style={[styles.btnText, { textAlign: 'center' }]}>CONFIRM & END MATCH</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={{ marginTop: 15 }} onPress={() => { setShowResult(null); setWinners([]); }}>
-              <Text style={{ color: colors.gray1, textAlign: 'center' }}>CANCEL</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <MatchResultModal
+        visible={!!showResult}
+        courtResult={showResult}
+        winners={winners}
+        onToggleWinner={(name) => {
+          if (winners.includes(name)) setWinners(winners.filter(w => w !== name));
+          else if (winners.length < 2) setWinners([...winners, name]);
+          else Alert.alert('Max 2 winners', 'Deselect one first.');
+        }}
+        onConfirm={finishMatch}
+        onCancel={() => { setShowResult(null); setWinners([]); }}
+      />
 
       {/* ==================================================================
           SUBSTITUTE MODAL
       ================================================================== */}
-      <Modal visible={showSubstitute} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>SUBSTITUTE PLAYER</Text>
-            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 10 }}>
-              Replacing: <Text style={{ color: colors.primary, fontWeight: 'bold' }}>{substituteOutPlayer}</Text>
-            </Text>
-            <Text style={{ color: colors.gray2, marginBottom: 10 }}>Who replaces them? (from queue)</Text>
-            <ScrollView style={{ maxHeight: 260 }}>
-              {(club.court_occupants?.[substituteCourtIdx] || []).length > 0 && (
-                <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 8 }}>Tap a court player to swap out:</Text>
-              )}
-              {/* First pick who to swap OUT */}
-              {!substituteOutPlayer || substituteOutPlayer === '' ? (
-                (club.court_occupants?.[substituteCourtIdx] || []).map((p: any, i: number) => (
-                  <TouchableOpacity key={i} style={styles.modalItem} onPress={() => setSubstituteOutPlayer(p.name)}>
-                    <Text style={{ color: colors.white }}>{p.name}</Text>
-                    <Text style={{ color: colors.red }}>SWAP OUT</Text>
-                  </TouchableOpacity>
-                ))
-              ) : (
-                // Now pick who to swap IN
-                (club.waiting_list || []).filter((p: any) => !p.isResting).map((p: any, i: number) => (
-                  <TouchableOpacity key={i} style={styles.modalItem} onPress={() => doSubstitute(p.name)}>
-                    <Text style={{ color: colors.white }}>{p.name}</Text>
-                    <Text style={{ color: colors.green }}>SWAP IN</Text>
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
-            <TouchableOpacity style={{ marginTop: 20 }} onPress={() => { setShowSubstitute(false); setSubstituteOutPlayer(''); }}>
-              <Text style={{ color: colors.gray1, textAlign: 'center' }}>CANCEL</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <SubstituteModal
+        visible={showSubstitute}
+        substituteCourtIdx={substituteCourtIdx}
+        substituteOutPlayer={substituteOutPlayer}
+        courtOccupants={club.court_occupants || {}}
+        waitingList={club.waiting_list || []}
+        onSetSubstituteOutPlayer={setSubstituteOutPlayer}
+        onDoSubstitute={doSubstitute}
+        onCancel={() => { setShowSubstitute(false); setSubstituteOutPlayer(''); }}
+      />
 
       {/* ==================================================================
           MATCH HISTORY MODAL
       ================================================================== */}
-      <Modal visible={showMatchHistory} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>MATCH HISTORY</Text>
-            <ScrollView style={{ maxHeight: 420 }}>
-              {matchHistory.length === 0 ? (
-                <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 20 }}>No matches played yet.</Text>
-              ) : (
-                matchHistory.map((m: any, i: number) => {
-                  const date = new Date(m.date);
-                  const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
-                  return (
-                    <View key={i} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSoft }}>
-                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.gray2, fontSize: 11 }}>{courtLabel} {m.court}  •  {timeStr}</Text>
-                        {m.winners?.length > 0 && (
-                          <Text style={{ color: colors.primary, fontSize: 11 }}>🏆 {m.winners.join(' & ')}</Text>
-                        )}
-                      </View>
-                      <Text style={{ color: colors.white, fontSize: 13 }}>
-                        <Text style={{ color: m.winners?.includes(m.team1[0]) || m.winners?.includes(m.team1[1]) ? colors.primary : colors.white }}>
-                          {m.team1?.join(' & ')}
-                        </Text>
-                        <Text style={{ color: colors.gray3 }}> vs </Text>
-                        <Text style={{ color: m.winners?.includes(m.team2[0]) || m.winners?.includes(m.team2[1]) ? colors.primary : colors.white }}>
-                          {m.team2?.join(' & ')}
-                        </Text>
-                      </Text>
-                    </View>
-                  );
-                })
-              )}
-            </ScrollView>
-            <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowMatchHistory(false)}>
-              <Text style={{ color: colors.gray1, textAlign: 'center' }}>CLOSE</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <MatchHistoryModal
+        visible={showMatchHistory}
+        matchHistory={matchHistory}
+        courtLabel={courtLabel}
+        onClose={() => setShowMatchHistory(false)}
+      />
 
       {/* ==================================================================
           QR CODE MODAL (header tap)
       ================================================================== */}
-      <Modal visible={showQR} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { alignItems: 'center' }]}>
-            <Text style={styles.modalTitle}>SHARE CLUB</Text>
-            <Text style={{ color: colors.gray2, marginBottom: 20, textAlign: 'center' }}>Scan to join this session instantly</Text>
-            <QRCode value={`https://app.jastly.com/join?clubId=${club?.id}`} size={220} color={colors.primary} backgroundColor={colors.surface} />
-            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 14, textAlign: 'center' }}>Or share the link:</Text>
-            <Text selectable style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginTop: 3, marginBottom: 4 }}>
-              {`app.jastly.com/join?clubId=${club?.id}`}
-            </Text>
-            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 6, textAlign: 'center' }}>Club ID:</Text>
-            <Text style={{ color: colors.primary, fontSize: 26, fontWeight: 'bold', letterSpacing: 4, marginTop: 6 }}>{club?.id}</Text>
-            <TouchableOpacity style={{ marginTop: 25 }} onPress={() => setShowQR(false)}>
-              <Text style={{ color: colors.gray1, fontSize: 16 }}>CLOSE</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <ClubQRModal
+        visible={showQR}
+        title="SHARE CLUB"
+        deepLink={`https://app.jastly.com/join?clubId=${club?.id}`}
+        onClose={() => setShowQR(false)}
+      />
 
       {/* ==================================================================
           SYSTEM LOGS MODAL
       ================================================================== */}
-      <Modal visible={showLogs} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>SYSTEM LOGS</Text>
-            <ScrollView style={{ maxHeight: 320 }}>
-              {logs.length === 0 ? (
-                <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 20 }}>No logs yet. (Enable logging in Settings)</Text>
-              ) : (
-                logs.map((log, i) => (
-                  <Text key={i} style={{ color: colors.gray2, fontSize: 12, marginBottom: 4, lineHeight: 18 }}>{log}</Text>
-                ))
-              )}
-            </ScrollView>
-            <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowLogs(false)}>
-              <Text style={{ color: colors.gray1, textAlign: 'center' }}>CLOSE</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <SystemLogsModal
+        visible={showLogs}
+        logs={logs}
+        onClose={() => setShowLogs(false)}
+      />
 
       {/* ==================================================================
           INVITE QR CODE MODAL (settings)
       ================================================================== */}
-      <Modal visible={showJoinQR} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { alignItems: 'center' }]}>
-            <Text style={styles.modalTitle}>INVITE PLAYERS</Text>
-            <Text style={{ color: colors.gray2, marginBottom: 20, textAlign: 'center' }}>Scan with phone camera to join instantly</Text>
-            <QRCode value={`https://app.jastly.com/join?clubId=${club?.id}`} size={220} color={colors.primary} backgroundColor={colors.surface} />
-            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 14, textAlign: 'center' }}>Or share the link:</Text>
-            <Text selectable style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginTop: 3, marginBottom: 4 }}>
-              {`app.jastly.com/join?clubId=${club?.id}`}
-            </Text>
-            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 6, textAlign: 'center' }}>Club ID:</Text>
-            <Text style={{ color: colors.primary, fontSize: 26, fontWeight: 'bold', letterSpacing: 4, marginTop: 6 }}>{club?.id}</Text>
-            <TouchableOpacity style={{ marginTop: 28 }} onPress={() => setShowJoinQR(false)}>
-              <Text style={{ color: colors.gray1, fontSize: 16 }}>CLOSE</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <ClubQRModal
+        visible={showJoinQR}
+        title="INVITE PLAYERS"
+        deepLink={`https://app.jastly.com/join?clubId=${club?.id}`}
+        onClose={() => setShowJoinQR(false)}
+      />
 
       {/* ==================================================================
           LEADERBOARD MODAL
       ================================================================== */}
-      <Modal visible={showLeaderboard} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>LEADERBOARD</Text>
-            <ScrollView style={{ maxHeight: 380 }}>
-              {leaderboard.map((p: any, i: number) => {
-                const rate = (p.games || 0) > 0 ? Math.round((p.wins / p.games) * 100) : 0;
-                return (
-                  <View key={i} style={[styles.modalItem, { alignItems: 'center' }]}>
-                    <Text style={{ color: i < 3 ? colors.primary : colors.gray2, fontWeight: 'bold', width: 28 }}>
-                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
-                    </Text>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ color: colors.white, fontWeight: 'bold' }}>{p.name}</Text>
-                      <Text style={{ color: colors.gray3, fontSize: 11 }}>{p.wins || 0}W  /  {p.games || 0}G</Text>
-                    </View>
-                    <Text style={{ color: colors.green, fontWeight: 'bold' }}>{rate}%</Text>
-                  </View>
-                );
-              })}
-              {leaderboard.length === 0 && (
-                <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 20 }}>No stats yet.</Text>
-              )}
-            </ScrollView>
-            <TouchableOpacity style={{ marginTop: 20 }} onPress={() => setShowLeaderboard(false)}>
-              <Text style={{ color: colors.gray1, textAlign: 'center' }}>CLOSE</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <LeaderboardModal
+        visible={showLeaderboard}
+        leaderboard={leaderboard}
+        onClose={() => setShowLeaderboard(false)}
+      />
 
       {/* ==================================================================
           SETUP PIN MODAL
       ================================================================== */}
-      <Modal visible={showSetupPin} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>SET UP PIN</Text>
-            <TextInput style={styles.input} placeholder="Enter 4-digit PIN" placeholderTextColor={colors.gray3} secureTextEntry maxLength={4} keyboardType="numeric" value={setupPin1} onChangeText={(v) => { setSetupPin1(v); setPinError(false); }} />
-            <TextInput style={styles.input} placeholder="Confirm PIN" placeholderTextColor={colors.gray3} secureTextEntry maxLength={4} keyboardType="numeric" value={setupPin2} onChangeText={(v) => { setSetupPin2(v); setPinError(false); }} />
-            {pinError && <Text style={{ color: colors.red, textAlign: 'center', marginBottom: 10 }}>PINs do not match</Text>}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-              <TouchableOpacity onPress={() => { setShowSetupPin(false); setTempPinEnabled(false); }}><Text style={{ color: colors.gray1 }}>CANCEL</Text></TouchableOpacity>
-              <TouchableOpacity onPress={saveSetupPin}><Text style={{ color: colors.primary, fontWeight: 'bold' }}>SAVE PIN</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <SetupPinModal
+        visible={showSetupPin}
+        setupPin1={setupPin1}
+        setupPin2={setupPin2}
+        pinError={pinError}
+        onChangePin1={(v) => { setSetupPin1(v); setPinError(false); }}
+        onChangePin2={(v) => { setSetupPin2(v); setPinError(false); }}
+        onSave={saveSetupPin}
+        onCancel={() => { setShowSetupPin(false); setTempPinEnabled(false); }}
+      />
 
       {/* ==================================================================
           ENTER PIN MODAL
       ================================================================== */}
-      <Modal visible={showEnterPin} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>ENTER PIN</Text>
-            <TextInput style={styles.input} placeholder="****" placeholderTextColor={colors.gray3} secureTextEntry maxLength={4} keyboardType="numeric" autoFocus value={enterPinInput} onChangeText={setEnterPinInput} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-              <TouchableOpacity onPress={() => { setShowEnterPin(false); setEnterPinInput(''); setPendingPinAction(null); }}><Text style={{ color: colors.gray1 }}>CANCEL</Text></TouchableOpacity>
-              <TouchableOpacity onPress={verifyPin}><Text style={{ color: colors.primary, fontWeight: 'bold' }}>UNLOCK</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <EnterPinModal
+        visible={showEnterPin}
+        enterPinInput={enterPinInput}
+        onChangePinInput={setEnterPinInput}
+        onVerify={verifyPin}
+        onCancel={() => { setShowEnterPin(false); setEnterPinInput(''); setPendingPinAction(null); }}
+      />
 
       {/* ==================================================================
           FIRST-TIME SPORT SETUP MODAL (host only, new clubs)
       ================================================================== */}
-      <Modal visible={showSportSetup} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>WELCOME! CHOOSE YOUR SPORT</Text>
-            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 16 }}>
-              This customises the app for your session — you can change it any time in Settings.
-            </Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
-              {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
-                <TouchableOpacity
-                  key={key}
-                  onPress={() => setTempSport(key)}
-                  style={[styles.sportChip, tempSport === key && styles.sportChipActive]}
-                >
-                  <Text style={{ fontSize: 22 }}>{s.emoji}</Text>
-                  <Text style={{ color: tempSport === key ? colors.black : colors.gray2, fontSize: 11, marginTop: 2 }}>{s.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-            <TouchableOpacity
-              style={[styles.btnPrimary, { padding: 14 }]}
-              onPress={async () => {
-                await supabase.from('clubs').update({ sport: tempSport }).eq('id', cidRef.current);
-                setClub((prev: any) => ({ ...prev, sport: tempSport }));
-                setShowSportSetup(false);
-                setShowStartup(true);
-              }}
-            >
-              <Text style={[styles.btnText, { textAlign: 'center', fontSize: 14 }]}>
-                {getSportConfig(tempSport).emoji}  START WITH {getSportConfig(tempSport).label.toUpperCase()}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <SportSetupModal
+        visible={showSportSetup}
+        tempSport={tempSport}
+        onSelectSport={setTempSport}
+        onConfirm={async () => {
+          await supabase.from('clubs').update({ sport: tempSport }).eq('id', cidRef.current);
+          setClub((prev: any) => ({ ...prev, sport: tempSport }));
+          setShowSportSetup(false);
+          setShowStartup(true);
+        }}
+      />
 
       {/* ==================================================================
           SESSION STARTUP MODAL (host only, every session)
       ================================================================== */}
-      <Modal visible={showStartup} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>SESSION SETUP</Text>
-
-            <Text style={styles.sectionHeader}>SPORT</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-              {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
-                <TouchableOpacity
-                  key={key}
-                  onPress={() => setTempSport(key)}
-                  style={[styles.sportChip, tempSport === key && styles.sportChipActive]}
-                >
-                  <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
-                  <Text style={{ color: tempSport === key ? colors.black : colors.gray2, fontSize: 11, marginTop: 2 }}>{s.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-
-            <Text style={[styles.sectionHeader, { marginTop: 4 }]}>COURTS</Text>
-            <View style={styles.settingsRow}>
-              <Text style={{ color: colors.white, fontWeight: 'bold' }}>Active {getSportConfig(tempSport).court}s</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <TouchableOpacity onPress={() => setStartupCourts(Math.max(1, startupCourts - 1))} style={styles.mathBtn}><Text style={{ color: colors.white }}>-</Text></TouchableOpacity>
-                <Text style={{ color: colors.primary, marginHorizontal: 20, fontWeight: 'bold', fontSize: 22 }}>{startupCourts}</Text>
-                <TouchableOpacity onPress={() => setStartupCourts(Math.min(10, startupCourts + 1))} style={styles.mathBtn}><Text style={{ color: colors.white }}>+</Text></TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Restore previous queue if one was saved */}
-            {(club?.saved_queue?.length > 0) && (
-              <TouchableOpacity
-                style={[styles.btnPrimary, { backgroundColor: colors.blueDark, marginTop: 20, padding: 14 }]}
-                onPress={async () => {
-                  const savedQ = club.saved_queue || [];
-                  setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }));
-                  await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }).eq('id', cidRef.current);
-                  addLog('SYSTEM: Restored previous queue.');
-                  setShowStartup(false);
-                }}
-              >
-                <Text style={[styles.btnText, { textAlign: 'center' }]}>♻️  RESTORE LAST SESSION'S QUEUE ({club.saved_queue.length} players)</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity
-              style={[styles.btnDanger, { backgroundColor: colors.gray3, marginTop: 15 }]}
-              onPress={async () => {
-                setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts, waiting_list: [], court_occupants: {} }));
-                await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts, waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
-                addLog('SYSTEM: Reset Session.');
-                secondsCounter.current = 0; currentTopPlayerRef.current = '';
-                setShowStartup(false);
-              }}
-            >
-              <Text style={[styles.btnText, { textAlign: 'center' }]}>RESET SESSION</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.btnPrimary, { marginTop: 10, padding: 14 }]}
-              onPress={async () => {
-                setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts }));
-                await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts }).eq('id', cidRef.current);
-                setShowStartup(false);
-              }}
-            >
-              <Text style={[styles.btnText, { textAlign: 'center', fontSize: 15 }]}>CONTINUE SESSION</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      <SessionStartupModal
+        visible={showStartup}
+        tempSport={tempSport}
+        startupCourts={startupCourts}
+        savedQueueLength={club?.saved_queue?.length || 0}
+        onSelectSport={setTempSport}
+        onChangeStartupCourts={setStartupCourts}
+        onRestore={async () => {
+          const savedQ = club.saved_queue || [];
+          setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }));
+          await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }).eq('id', cidRef.current);
+          addLog('SYSTEM: Restored previous queue.');
+          setShowStartup(false);
+        }}
+        onReset={async () => {
+          setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts, waiting_list: [], court_occupants: {} }));
+          await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts, waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
+          addLog('SYSTEM: Reset Session.');
+          secondsCounter.current = 0; currentTopPlayerRef.current = '';
+          setShowStartup(false);
+        }}
+        onContinue={async () => {
+          setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts }));
+          await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts }).eq('id', cidRef.current);
+          setShowStartup(false);
+        }}
+      />
 
     </View>
   );
 }
 
-// ============================================================
-// STYLES  (called with live colors so both themes work)
-// ============================================================
-const makeStyles = (C: ColorSet) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg, paddingTop: 50 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { padding: 15, backgroundColor: C.primary, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { fontWeight: 'bold', color: C.black, fontSize: 18 },
-  idText: { color: C.black, fontSize: 10, fontWeight: 'bold' },
-  settingsBtn: { marginRight: 15, padding: 5 },
-  courtBusy: { backgroundColor: C.redDark, borderColor: C.red },
-  courtFree: { backgroundColor: C.surface, borderColor: C.border, justifyContent: 'center' },
-  courtTitle: { color: C.primary, fontWeight: 'bold', textAlign: 'center', marginBottom: 4 },
-  courtPlayer: { color: C.white, fontWeight: 'bold', textAlign: 'center' },
-  courtFreeText: { color: C.green, textAlign: 'center', fontWeight: 'bold' },
-  banner: { backgroundColor: C.surface, padding: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderColor: C.border },
-  nextText: { color: C.primary, fontWeight: 'bold', fontSize: 14 },
-  btnPrimary: { backgroundColor: C.purple, padding: 10, borderRadius: 6 },
-  btnPrimaryText: { color: C.white, fontSize: 10, fontWeight: 'bold', backgroundColor: C.border, padding: 5, borderRadius: 4, width: 100, textAlign: 'center' },
-  btnDanger: { backgroundColor: C.red, padding: 8, borderRadius: 6 },
-  btnText: { color: C.white, fontWeight: 'bold', fontSize: 12, textAlign: 'center' },
-  mathBtn: { backgroundColor: C.border, paddingHorizontal: 15, paddingVertical: 5, borderRadius: 5 },
-  sportChip: {
-    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10,
-    borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, marginRight: 8, minWidth: 72,
-  },
-  sportChipActive: { backgroundColor: C.primary, borderColor: C.primary },
-  queueRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: C.surface, marginBottom: 5, borderRadius: 8, alignItems: 'center' },
-  pName: { color: C.white, fontSize: 16, fontWeight: 'bold' },
-  genderBadge: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
-  label: { color: C.gray2, fontSize: 12, marginBottom: 5 },
-  sectionHeader: { color: C.primary, fontWeight: 'bold', marginTop: 20, marginBottom: 10, fontSize: 13, letterSpacing: 1 },
-  settingsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginVertical: 8 },
-  modalOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: C.overlay, justifyContent: 'center', padding: 20, zIndex: 10 },
-  modalContent: { backgroundColor: C.surface, padding: 20, borderRadius: 10, borderWidth: 1, borderColor: C.border },
-  modalTitle: { color: C.primary, fontWeight: 'bold', marginBottom: 15, textAlign: 'center', fontSize: 16 },
-  modalItem: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, borderBottomWidth: 1, borderBottomColor: C.borderSoft },
-  input: { backgroundColor: C.bg, color: C.white, padding: 15, borderRadius: 5, marginBottom: 15, borderWidth: 1, borderColor: C.border },
-  fullModalOverlay: { flex: 1, backgroundColor: C.overlayLight, justifyContent: 'flex-end' },
-  fullModalContent: { backgroundColor: C.surfaceHigh, height: '90%', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  toolbar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.border, paddingBottom: 15 },
-  rosterRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.borderSoft, alignItems: 'center' },
-  genderBtn: { padding: 15, borderWidth: 1, borderColor: C.gray3, borderRadius: 8, marginHorizontal: 10, width: 120, alignItems: 'center' },
-  checkbox: { width: 22, height: 22, borderWidth: 2, borderColor: C.gray2, borderRadius: 4, marginRight: 15, justifyContent: 'center', alignItems: 'center' },
-});
+// makeStyles has been extracted to components/dashboard/dashboardStyles.ts
