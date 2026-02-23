@@ -54,6 +54,7 @@ export default function WelcomeScreen() {
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authNickname, setAuthNickname] = useState('');
+  const [authErrorMsg, setAuthErrorMsg] = useState('');
 
   // Simple math captcha for account creation
   const [captchaA, setCaptchaA] = useState(0);
@@ -71,6 +72,7 @@ export default function WelcomeScreen() {
     setAuthPassword('');
     setAuthConfirmPassword('');
     setAuthNickname('');
+    setAuthErrorMsg('');
     if (mode === 'create') refreshCaptcha();
   };
 
@@ -189,21 +191,22 @@ export default function WelcomeScreen() {
 
   // ─── Email / Password Auth ─────────────────────────────────────────────────
   const handleEmailAuth = async () => {
+    setAuthErrorMsg('');
     if (!authEmail.trim() || !authPassword.trim()) {
-      Alert.alert('Missing Fields', 'Enter your email and password.');
+      setAuthErrorMsg('Enter your email and password.');
       return;
     }
     if (authMode === 'create') {
       if (authPassword.length < 8) {
-        Alert.alert('Password Too Short', 'Password must be at least 8 characters.');
+        setAuthErrorMsg('Password must be at least 8 characters.');
         return;
       }
       if (authPassword !== authConfirmPassword) {
-        Alert.alert('Passwords Do Not Match', 'Please make sure both passwords are identical.');
+        setAuthErrorMsg('Passwords do not match.');
         return;
       }
       if (parseInt(captchaAnswer, 10) !== captchaA + captchaB) {
-        Alert.alert('Incorrect Answer', 'Please solve the sum correctly to prove you\'re human.');
+        setAuthErrorMsg('Incorrect answer — please solve the sum again.');
         refreshCaptcha();
         return;
       }
@@ -219,14 +222,10 @@ export default function WelcomeScreen() {
           password: authPassword,
           options: { data: { nickname } },
         });
-        if (error) { Alert.alert('Sign Up Error', error.message); return; }
-        // If no session, email confirmation is required — never reveal the email in UI
+        if (error) { setAuthErrorMsg(error.message); return; }
+        // If no session, email confirmation is required
         if (!data.session) {
-          Alert.alert(
-            'Confirm Your Email',
-            'We\'ve sent a confirmation link to your email address.\n\nClick the link to verify your account, then come back and sign in.',
-            [{ text: 'OK', onPress: () => switchAuthMode('signin') }]
-          );
+          setAuthErrorMsg('✅ Account created! Check your email for a confirmation link, then come back and sign in.');
           return;
         }
         uid = data.user?.id ?? null;
@@ -236,32 +235,22 @@ export default function WelcomeScreen() {
           password: authPassword,
         });
         if (error) {
-          // Email not yet confirmed — block and offer resend
           if (error.message.toLowerCase().includes('email not confirmed') ||
               error.message.toLowerCase().includes('not confirmed')) {
-            Alert.alert(
-              'Email Not Verified',
-              'You need to verify your email before signing in.\n\nCheck your inbox for the confirmation link.',
-              [
-                { text: 'Resend Email', onPress: async () => {
-                  await supabase.auth.resend({ type: 'signup', email: authEmail.trim().toLowerCase() });
-                  Alert.alert('Email Sent', 'A new confirmation link has been sent to your inbox.');
-                }},
-                { text: 'OK', style: 'cancel' },
-              ]
-            );
+            setAuthErrorMsg('Email not verified. Check your inbox or resend below.');
           } else {
-            Alert.alert('Sign In Error', error.message);
+            setAuthErrorMsg(error.message);
           }
           return;
         }
         uid = data.user?.id ?? null;
       }
 
-      if (!uid) { Alert.alert('Error', 'Could not authenticate.'); return; }
+      if (!uid) { setAuthErrorMsg('Could not authenticate.'); return; }
       await afterOAuthSuccess();
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Something went wrong');
+      setAuthErrorMsg(e.message || 'Something went wrong. Check your connection.');
+      console.error('[handleEmailAuth]', e);
     } finally {
       setIsAuthLoading(false);
     }
@@ -620,7 +609,7 @@ export default function WelcomeScreen() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.authOverlay}>
-            <View style={styles.authSheet}>
+            <ScrollView style={styles.authSheet} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
               <Text style={styles.authTitle}>HOST ACCOUNT</Text>
               <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 20, fontSize: 13 }}>
                 Sign in to access your club from any device
@@ -775,6 +764,25 @@ export default function WelcomeScreen() {
                     </TouchableOpacity>
                   )}
 
+                  {authErrorMsg ? (
+                    <Text style={{
+                      color: authErrorMsg.startsWith('✅') ? '#4caf50' : '#ff6b6b',
+                      fontSize: 13, textAlign: 'center', marginBottom: 8,
+                    }}>
+                      {authErrorMsg}
+                    </Text>
+                  ) : null}
+                  {authErrorMsg?.includes('not verified') && (
+                    <TouchableOpacity
+                      style={{ alignSelf: 'center', marginBottom: 8 }}
+                      onPress={async () => {
+                        await supabase.auth.resend({ type: 'signup', email: authEmail.trim().toLowerCase() });
+                        setAuthErrorMsg('Resent! Check your inbox.');
+                      }}
+                    >
+                      <Text style={{ color: colors.primary, fontSize: 13 }}>Resend verification email</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={[styles.hostButton, { marginTop: 5, opacity: isAuthLoading ? 0.5 : 1 }]}
                     onPress={handleEmailAuth}
@@ -794,7 +802,7 @@ export default function WelcomeScreen() {
               >
                 <Text style={{ color: colors.gray1 }}>CANCEL</Text>
               </TouchableOpacity>
-            </View>
+            </ScrollView>
           </View>
         </KeyboardAvoidingView>
       </Modal>
@@ -850,7 +858,7 @@ const makeStyles = (C: ColorSet) => StyleSheet.create({
   authOverlay: { flex: 1, backgroundColor: C.overlay, justifyContent: 'flex-end' },
   authSheet: {
     backgroundColor: C.surfaceHigh, borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: 40,
+    padding: 24, maxHeight: '90%',
   },
   authTitle: { color: C.primary, fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 6 },
   oauthBtn: {
