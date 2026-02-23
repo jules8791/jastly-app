@@ -115,10 +115,12 @@ export default function WelcomeScreen() {
   const afterOAuthSuccess = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     const uid = session?.user?.id;
-    if (!uid) { Alert.alert('Error', 'Could not get user session.'); return; }
+    if (!uid) { setAuthErrorMsg('Signed in but could not get session. Try again.'); return; }
 
-    const { data: existingClub } = await supabase
+    const { data: existingClub, error: selectError } = await supabase
       .from('clubs').select('id').eq('host_uid', uid).maybeSingle();
+    if (selectError) { setAuthErrorMsg('DB error: ' + selectError.message); return; }
+
     let finalClubId: string;
 
     if (existingClub) {
@@ -128,7 +130,7 @@ export default function WelcomeScreen() {
         Math.random().toString(36).substring(2, 7).toUpperCase() +
         Math.random().toString(36).substring(2, 7).toUpperCase();
       const { error: dbError } = await supabase.from('clubs').insert([{ id: newClubId, host_uid: uid }]);
-      if (dbError) { Alert.alert('DB Error', 'Did you run the SQL setup script?'); return; }
+      if (dbError) { setAuthErrorMsg('DB error: ' + dbError.message + ' — have you run the SQL setup script in Supabase?'); return; }
       finalClubId = newClubId;
     }
 
