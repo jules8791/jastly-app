@@ -56,6 +56,13 @@ export default function WelcomeScreen() {
   const [authNickname, setAuthNickname] = useState('');
   const [authErrorMsg, setAuthErrorMsg] = useState('');
 
+  // Password recovery (from reset email link)
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [recoveryPassword, setRecoveryPassword] = useState('');
+  const [recoveryConfirm, setRecoveryConfirm] = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [recoveryMsg, setRecoveryMsg] = useState('');
+
   // Simple math captcha for account creation
   const [captchaA, setCaptchaA] = useState(0);
   const [captchaB, setCaptchaB] = useState(0);
@@ -80,6 +87,38 @@ export default function WelcomeScreen() {
     checkExistingSession();
     loadRecentClubs();
   }, []);
+
+  // Listen for password recovery event (triggered when user clicks reset link)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setShowRecoveryModal(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSetNewPassword = async () => {
+    setRecoveryMsg('');
+    if (recoveryPassword.length < 8) { setRecoveryMsg('Password must be at least 8 characters.'); return; }
+    if (recoveryPassword !== recoveryConfirm) { setRecoveryMsg('Passwords do not match.'); return; }
+    setRecoveryLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: recoveryPassword });
+      if (error) { setRecoveryMsg(error.message); return; }
+      setRecoveryMsg('✅ Password updated! Signing you in...');
+      setRecoveryPassword('');
+      setRecoveryConfirm('');
+      setTimeout(async () => {
+        setShowRecoveryModal(false);
+        await afterOAuthSuccess();
+      }, 1500);
+    } catch (e: any) {
+      setRecoveryMsg(e.message || 'Something went wrong.');
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
 
   // ─── Session restore ──────────────────────────────────────────────────────
   const checkExistingSession = async () => {
@@ -833,6 +872,51 @@ export default function WelcomeScreen() {
           </View>
         </Modal>
       )}
+
+      {/* ── PASSWORD RECOVERY MODAL ── */}
+      <Modal visible={showRecoveryModal} animationType="slide" transparent>
+        <View style={styles.authOverlay}>
+          <View style={[styles.authSheet, { padding: 24 }]}>
+            <Text style={styles.authTitle}>SET NEW PASSWORD</Text>
+            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 20, fontSize: 13 }}>
+              Choose a new password for your account.
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder="New Password"
+              placeholderTextColor={colors.gray3}
+              value={recoveryPassword}
+              onChangeText={setRecoveryPassword}
+              secureTextEntry
+              autoComplete="new-password"
+            />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm New Password"
+              placeholderTextColor={colors.gray3}
+              value={recoveryConfirm}
+              onChangeText={setRecoveryConfirm}
+              secureTextEntry
+              autoComplete="new-password"
+            />
+            {recoveryMsg ? (
+              <Text style={{ color: recoveryMsg.startsWith('✅') ? '#4caf50' : '#ff6b6b', fontSize: 13, textAlign: 'center', marginBottom: 8 }}>
+                {recoveryMsg}
+              </Text>
+            ) : null}
+            <TouchableOpacity
+              style={[styles.hostButton, { marginTop: 5, opacity: recoveryLoading ? 0.5 : 1 }]}
+              onPress={handleSetNewPassword}
+              disabled={recoveryLoading}
+            >
+              {recoveryLoading
+                ? <ActivityIndicator color={colors.black} />
+                : <Text style={styles.btnText}>UPDATE PASSWORD</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
