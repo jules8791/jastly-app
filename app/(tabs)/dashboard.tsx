@@ -451,6 +451,7 @@ export default function Dashboard() {
       setTempSport('badminton');
       setShowSportSetup(true);
     } else {
+      setTempSport(club.sport);
       setShowStartup(true);
     }
   }, [isHost, club]);
@@ -2437,9 +2438,24 @@ export default function Dashboard() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>SESSION SETUP</Text>
-            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 20 }}>How many courts are available today?</Text>
+
+            <Text style={styles.sectionHeader}>SPORT</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+              {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setTempSport(key)}
+                  style={[styles.sportChip, tempSport === key && styles.sportChipActive]}
+                >
+                  <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
+                  <Text style={{ color: tempSport === key ? colors.black : colors.gray2, fontSize: 11, marginTop: 2 }}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <Text style={[styles.sectionHeader, { marginTop: 4 }]}>COURTS</Text>
             <View style={styles.settingsRow}>
-              <Text style={{ color: colors.white, fontWeight: 'bold' }}>Active Courts</Text>
+              <Text style={{ color: colors.white, fontWeight: 'bold' }}>Active {getSportConfig(tempSport).court}s</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <TouchableOpacity onPress={() => setStartupCourts(Math.max(1, startupCourts - 1))} style={styles.mathBtn}><Text style={{ color: colors.white }}>-</Text></TouchableOpacity>
                 <Text style={{ color: colors.primary, marginHorizontal: 20, fontWeight: 'bold', fontSize: 22 }}>{startupCourts}</Text>
@@ -2453,8 +2469,8 @@ export default function Dashboard() {
                 style={[styles.btnPrimary, { backgroundColor: colors.blueDark, marginTop: 20, padding: 14 }]}
                 onPress={async () => {
                   const savedQ = club.saved_queue || [];
-                  setClub((prev: any) => ({ ...prev, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }));
-                  await supabase.from('clubs').update({ active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }).eq('id', cidRef.current);
+                  setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }));
+                  await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts, waiting_list: savedQ, court_occupants: {} }).eq('id', cidRef.current);
                   addLog('SYSTEM: Restored previous queue.');
                   setShowStartup(false);
                 }}
@@ -2466,8 +2482,8 @@ export default function Dashboard() {
             <TouchableOpacity
               style={[styles.btnDanger, { backgroundColor: colors.gray3, marginTop: 15 }]}
               onPress={async () => {
-                setClub((prev: any) => ({ ...prev, active_courts: startupCourts, waiting_list: [], court_occupants: {} }));
-                await supabase.from('clubs').update({ active_courts: startupCourts, waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
+                setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts, waiting_list: [], court_occupants: {} }));
+                await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts, waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
                 addLog('SYSTEM: Reset Session.');
                 secondsCounter.current = 0; currentTopPlayerRef.current = '';
                 setShowStartup(false);
@@ -2479,8 +2495,8 @@ export default function Dashboard() {
             <TouchableOpacity
               style={[styles.btnPrimary, { marginTop: 10, padding: 14 }]}
               onPress={async () => {
-                setClub((prev: any) => ({ ...prev, active_courts: startupCourts }));
-                await supabase.from('clubs').update({ active_courts: startupCourts }).eq('id', cidRef.current);
+                setClub((prev: any) => ({ ...prev, sport: tempSport, active_courts: startupCourts }));
+                await supabase.from('clubs').update({ sport: tempSport, active_courts: startupCourts }).eq('id', cidRef.current);
                 setShowStartup(false);
               }}
             >
