@@ -1313,14 +1313,23 @@ export default function Dashboard() {
           )}
           <TouchableOpacity
             style={styles.btnDanger}
-            onPress={() => Alert.alert('Leave Session?', 'Are you sure?', [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Leave', style: 'destructive', onPress: async () => {
+            onPress={async () => {
+              if (Platform.OS === 'web') {
+                if (!window.confirm('Leave this session?')) return;
                 if (!isHost) sendReq('leave');
                 await AsyncStorage.multiRemove(['currentClubId', 'isHost']).catch(() => {});
                 router.replace('/');
-              }},
-            ])}
+              } else {
+                Alert.alert('Leave Session?', 'Are you sure?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Leave', style: 'destructive', onPress: async () => {
+                    if (!isHost) sendReq('leave');
+                    await AsyncStorage.multiRemove(['currentClubId', 'isHost']).catch(() => {});
+                    router.replace('/');
+                  }},
+                ]);
+              }
+            }}
           >
             <Text style={styles.btnText}>LEAVE</Text>
           </TouchableOpacity>
