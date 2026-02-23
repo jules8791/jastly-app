@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Privacy Policy — Queue Master by Jastly</title>
+  <meta name="description" content="Queue Master privacy policy — what data we collect, how we use it, and your rights under GDPR." />
+  <link rel="canonical" href="https://www.jastly.com/privacy.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --yellow: #FFEB3B;
+      --yellow-dim: #F9D71C;
+      --purple: #4A148C;
+      --bg: #000;
+      --surface: #111;
+      --surface2: #1A1A1A;
+      --border: #222;
+      --gray1: #AAA;
+      --gray2: #666;
+      --white: #FFF;
+    }
+
+    body.light {
+      --bg: #F5F5F5;
+      --surface: #FFF;
+      --surface2: #EBEBEB;
+      --border: #DDD;
+      --gray1: #444;
+      --gray2: #999;
+      --white: #111;
+    }
+    body.light nav { background: rgba(245,245,245,0.95); }
+    body.light .nav-logo-text { color: var(--purple); }
+
+    .theme-toggle {
+      background: none; border: 1px solid var(--border);
+      color: var(--gray1); cursor: pointer; border-radius: 6px;
+      padding: 7px 10px; font-size: 16px; line-height: 1;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .theme-toggle:hover { border-color: var(--yellow); background: rgba(255,235,59,0.08); }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      line-height: 1.7;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 40px;
+      background: rgba(0,0,0,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-icon { font-size: 24px; line-height: 1; }
+    .nav-logo-text { font-weight: 800; font-size: 18px; color: var(--yellow); letter-spacing: -0.5px; }
+    .nav-logo-by { font-size: 11px; color: var(--gray2); margin-top: -2px; font-weight: 500; }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { color: var(--gray1); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--white); }
+    .btn-nav { background: var(--yellow); color: #000; padding: 9px 22px; border-radius: 8px; font-weight: 700; font-size: 14px; text-decoration: none; }
+    .btn-nav:hover { background: var(--yellow-dim); }
+
+    /* ── PAGE ── */
+    .page { max-width: 780px; margin: 0 auto; padding: 140px 40px 100px; }
+
+    .page-badge {
+      display: inline-block;
+      background: rgba(255,235,59,0.1);
+      border: 1px solid rgba(255,235,59,0.25);
+      color: var(--yellow);
+      font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 6px 14px; border-radius: 20px; margin-bottom: 24px;
+    }
+
+    h1 { font-size: clamp(28px, 5vw, 42px); font-weight: 900; line-height: 1.1; margin-bottom: 12px; }
+    h1 span { color: var(--yellow); }
+    .updated { color: var(--gray2); font-size: 13px; margin-bottom: 48px; }
+
+    /* ── TOC ── */
+    .toc {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 48px;
+    }
+    .toc h3 { font-size: 13px; font-weight: 700; color: var(--gray1); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; }
+    .toc li { margin-bottom: 4px; }
+    .toc a { color: var(--yellow); text-decoration: none; font-size: 14px; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* ── SECTIONS ── */
+    .section { margin-bottom: 48px; }
+    .section h2 { font-size: 22px; font-weight: 800; margin-bottom: 14px; padding-top: 8px; }
+    .section h3 { font-size: 16px; font-weight: 700; margin: 18px 0 8px; color: var(--yellow); }
+    .section p { color: var(--gray1); font-size: 15px; margin-bottom: 12px; }
+    .section ul, .section ol { padding-left: 22px; margin-bottom: 12px; }
+    .section li { color: var(--gray1); font-size: 15px; margin-bottom: 6px; }
+    .section a { color: var(--yellow); }
+    .highlight {
+      background: rgba(255,235,59,0.07);
+      border-left: 3px solid var(--yellow);
+      border-radius: 4px;
+      padding: 14px 18px;
+      margin: 16px 0;
+      font-size: 14px;
+      color: var(--gray1);
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 32px 40px;
+      text-align: center;
+    }
+    .footer-copy { color: var(--gray2); font-size: 13px; }
+    .footer-copy a { color: var(--gray1); text-decoration: none; margin: 0 8px; }
+    .footer-copy a:hover { color: var(--white); }
+
+    @media (max-width: 600px) {
+      nav { padding: 14px 20px; }
+      .page { padding: 110px 20px 80px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="nav-logo">
+      <span class="nav-logo-icon">🏆</span>
+      <div>
+        <div class="nav-logo-text">Queue Master</div>
+        <div class="nav-logo-by">by Jastly</div>
+      </div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/#features">Features</a></li>
+      <li><a href="/#how-it-works">How it works</a></li>
+      <li><button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">🌙</button></li>
+      <li><a href="https://app.jastly.com" class="btn-nav">Open App</a></li>
+    </ul>
+  </nav>
+
+  <main class="page">
+    <div class="page-badge">Legal</div>
+    <h1>Privacy <span>Policy</span></h1>
+    <p class="updated">Last updated: February 2026</p>
+
+    <div class="toc">
+      <h3>Contents</h3>
+      <ol>
+        <li><a href="#who">Who we are</a></li>
+        <li><a href="#data-collected">Data we collect</a></li>
+        <li><a href="#how-used">How we use your data</a></li>
+        <li><a href="#third-parties">Third-party services</a></li>
+        <li><a href="#retention">Data retention</a></li>
+        <li><a href="#your-rights">Your rights</a></li>
+        <li><a href="#cookies">Cookies</a></li>
+        <li><a href="#children">Children</a></li>
+        <li><a href="#changes">Changes to this policy</a></li>
+        <li><a href="#contact">Contact us</a></li>
+        <li><a href="#terms">Terms of use</a></li>
+      </ol>
+    </div>
+
+    <div class="highlight">
+      The short version: Queue Master collects only what is needed to run your club sessions. We do not sell your data, show you adverts, or share your information with anyone beyond the services that power the app.
+    </div>
+
+    <div class="section" id="who">
+      <h2>1. Who we are</h2>
+      <p>Queue Master is a product made by <strong>Jastly</strong>. When this policy refers to "we", "us" or "our", it means Jastly. You can reach us at <a href="mailto:hello@jastly.com">hello@jastly.com</a>.</p>
+    </div>
+
+    <div class="section" id="data-collected">
+      <h2>2. Data we collect</h2>
+
+      <h3>Host accounts (email sign-up)</h3>
+      <ul>
+        <li>Email address — used for authentication and account recovery.</li>
+        <li>Display name / nickname — shown in the app header (optional).</li>
+        <li>Password — stored as a secure hash by Supabase. We never see it in plain text.</li>
+      </ul>
+
+      <h3>Anonymous hosts (native app, no account)</h3>
+      <ul>
+        <li>A randomly generated anonymous user ID — created by Supabase to link you to your club. Not tied to any personal information.</li>
+      </ul>
+
+      <h3>Club and session data</h3>
+      <ul>
+        <li>Club name, sport, and settings you configure.</li>
+        <li>Player names you add to your roster (first name or nickname — no requirement to use real names).</li>
+        <li>Queue order, court assignments, match history, and win/loss records.</li>
+        <li>Club join password (stored as a one-way hash, never readable).</li>
+      </ul>
+
+      <h3>Guest users (no account required)</h3>
+      <ul>
+        <li>The name you enter when joining a session — stored only in the club's queue data, which is controlled by the host.</li>
+        <li>No email address or account is created for guests.</li>
+      </ul>
+
+      <h3>Usage data</h3>
+      <ul>
+        <li>We do not use analytics trackers, advertising SDKs, or behavioural profiling tools.</li>
+        <li>Standard web server logs (IP address, browser type, page requests) may be retained for up to 30 days by our infrastructure provider for security purposes.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="how-used">
+      <h2>3. How we use your data</h2>
+      <p>We use your data solely to provide the Queue Master service:</p>
+      <ul>
+        <li>Authenticating your account and restoring your session across devices.</li>
+        <li>Storing your club configuration so guests can join and the queue persists.</li>
+        <li>Sending password reset emails when you request them.</li>
+        <li>Responding to support requests you send us directly.</li>
+      </ul>
+      <p>We do <strong>not</strong> use your data for advertising, profiling, or marketing without your explicit consent.</p>
+    </div>
+
+    <div class="section" id="third-parties">
+      <h2>4. Third-party services</h2>
+
+      <h3>Supabase</h3>
+      <p>All app data (user accounts, clubs, queues) is stored on <a href="https://supabase.com" target="_blank" rel="noopener">Supabase</a>, a cloud database and authentication platform. Supabase processes data on servers in the EU (Frankfurt region). Their privacy policy is available at <a href="https://supabase.com/privacy" target="_blank" rel="noopener">supabase.com/privacy</a>.</p>
+
+      <h3>Google Fonts</h3>
+      <p>Our marketing website loads fonts from Google Fonts. This causes your browser to make a request to Google's servers. Google's privacy policy applies: <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">policies.google.com/privacy</a>.</p>
+
+      <h3>Netlify / hosting providers</h3>
+      <p>The app and website are hosted on cloud infrastructure (Netlify, GitHub). Standard server access logs may be retained by these providers per their own policies.</p>
+
+      <p>We do not share your data with any other third parties.</p>
+    </div>
+
+    <div class="section" id="retention">
+      <h2>5. Data retention</h2>
+      <ul>
+        <li><strong>Account data:</strong> Retained for as long as your account is active. You can request deletion at any time.</li>
+        <li><strong>Club / session data:</strong> Stored indefinitely until the host deletes it via the app's "Full Wipe" feature, or requests deletion.</li>
+        <li><strong>Guest names in queues:</strong> Removed from the queue when the session ends or the host clears the queue. They may persist in match history records controlled by the host.</li>
+        <li><strong>Server logs:</strong> Deleted after 30 days.</li>
+      </ul>
+    </div>
+
+    <div class="section" id="your-rights">
+      <h2>6. Your rights</h2>
+      <p>Under UK GDPR and EU GDPR, you have the right to:</p>
+      <ul>
+        <li><strong>Access</strong> the personal data we hold about you.</li>
+        <li><strong>Correct</strong> inaccurate data.</li>
+        <li><strong>Delete</strong> your account and associated data.</li>
+        <li><strong>Object</strong> to certain types of processing.</li>
+        <li><strong>Portability</strong> — receive a copy of your data in a machine-readable format.</li>
+      </ul>
+      <p>To exercise any of these rights, email <a href="mailto:hello@jastly.com?subject=Data%20Request">hello@jastly.com</a> with the subject "Data Request". We will respond within 30 days.</p>
+    </div>
+
+    <div class="section" id="cookies">
+      <h2>7. Cookies</h2>
+      <p>The Queue Master web app (<a href="https://app.jastly.com">app.jastly.com</a>) uses browser local storage and session storage to keep you logged in and remember your preferences. These are essential for the app to function.</p>
+      <p>The marketing website (<a href="https://www.jastly.com">jastly.com</a>) does not set any tracking or advertising cookies. Google Fonts may set functional cookies in your browser.</p>
+    </div>
+
+    <div class="section" id="children">
+      <h2>8. Children</h2>
+      <p>Queue Master is not directed at children under 13. We do not knowingly collect personal data from children. If you believe a child has provided us with personal data, please contact us and we will delete it promptly.</p>
+    </div>
+
+    <div class="section" id="changes">
+      <h2>9. Changes to this policy</h2>
+      <p>We may update this policy from time to time. When we do, we will update the "Last updated" date at the top of this page. Continued use of the app after changes constitutes acceptance of the updated policy.</p>
+    </div>
+
+    <div class="section" id="contact">
+      <h2>10. Contact us</h2>
+      <p>For any privacy-related questions or requests: <a href="mailto:hello@jastly.com">hello@jastly.com</a></p>
+      <p>Or visit our <a href="/contact.html">Contact page</a>.</p>
+    </div>
+
+    <hr style="border:none; border-top: 1px solid var(--border); margin: 48px 0;" />
+
+    <div class="section" id="terms">
+      <h2>11. Terms of Use</h2>
+      <p>By using Queue Master, you agree to the following:</p>
+
+      <h3>Permitted use</h3>
+      <p>Queue Master is provided for lawful, personal and club use. You may use it to manage sports sessions, player queues, and court assignments for yourself and your club members.</p>
+
+      <h3>Prohibited use</h3>
+      <ul>
+        <li>You must not use the app for any unlawful purpose or in a way that harms others.</li>
+        <li>You must not attempt to reverse-engineer, scrape, or abuse the app's infrastructure.</li>
+        <li>You must not store sensitive personal data (e.g. medical records, financial information) within the app. Player names and game statistics only.</li>
+      </ul>
+
+      <h3>Availability</h3>
+      <p>We provide Queue Master on a best-efforts basis. We do not guarantee uninterrupted availability and are not liable for any loss caused by downtime or data loss. Always keep your own records for critical information.</p>
+
+      <h3>Intellectual property</h3>
+      <p>All content, branding, and software in Queue Master is owned by Jastly. You may not copy or redistribute it without permission.</p>
+
+      <h3>Liability</h3>
+      <p>Queue Master is provided "as is" without warranty. Jastly is not liable for any indirect, incidental, or consequential damages arising from use of the service.</p>
+
+      <h3>Governing law</h3>
+      <p>These terms are governed by the laws of England and Wales.</p>
+    </div>
+  </main>
+
+  <footer>
+    <p class="footer-copy">
+      © 2026 Jastly. All rights reserved. &nbsp;|&nbsp;
+      <a href="/">Home</a>
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/contact.html">Contact</a>
+    </p>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('themeToggle');
+    const isLight = () => document.body.classList.contains('light');
+    const applyTheme = (light) => {
+      document.body.classList.toggle('light', light);
+      toggle.textContent = light ? '🌙' : '☀️';
+      localStorage.setItem('jastly-theme', light ? 'light' : 'dark');
+    };
+    applyTheme(localStorage.getItem('jastly-theme') === 'light');
+    toggle.addEventListener('click', () => applyTheme(!isLight()));
+  </script>
+</body>
+</html>

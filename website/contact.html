@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contact Us — Queue Master by Jastly</title>
+  <meta name="description" content="Get in touch with the Queue Master team. We'd love to hear from you — feedback, bug reports, or partnership enquiries." />
+  <link rel="canonical" href="https://www.jastly.com/contact.html" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --yellow: #FFEB3B;
+      --yellow-dim: #F9D71C;
+      --purple: #4A148C;
+      --bg: #000;
+      --surface: #111;
+      --surface2: #1A1A1A;
+      --border: #222;
+      --gray1: #AAA;
+      --gray2: #666;
+      --white: #FFF;
+      --green: #4CAF50;
+    }
+
+    body.light {
+      --bg: #F5F5F5;
+      --surface: #FFF;
+      --surface2: #EBEBEB;
+      --border: #DDD;
+      --gray1: #444;
+      --gray2: #999;
+      --white: #111;
+    }
+    body.light nav { background: rgba(245,245,245,0.95); }
+    body.light .nav-logo-text { color: var(--purple); }
+
+    .theme-toggle {
+      background: none; border: 1px solid var(--border);
+      color: var(--gray1); cursor: pointer; border-radius: 6px;
+      padding: 7px 10px; font-size: 16px; line-height: 1;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .theme-toggle:hover { border-color: var(--yellow); background: rgba(255,235,59,0.08); }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--white);
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 40px;
+      background: rgba(0,0,0,0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+    .nav-logo-icon { font-size: 24px; line-height: 1; }
+    .nav-logo-text { font-weight: 800; font-size: 18px; color: var(--yellow); letter-spacing: -0.5px; }
+    .nav-logo-by { font-size: 11px; color: var(--gray2); margin-top: -2px; font-weight: 500; }
+    .nav-links { display: flex; align-items: center; gap: 32px; list-style: none; }
+    .nav-links a { color: var(--gray1); text-decoration: none; font-size: 14px; font-weight: 500; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--white); }
+    .btn-nav { background: var(--yellow); color: #000; padding: 9px 22px; border-radius: 8px; font-weight: 700; font-size: 14px; text-decoration: none; }
+    .btn-nav:hover { background: var(--yellow-dim); }
+
+    /* ── PAGE ── */
+    .page { max-width: 700px; margin: 0 auto; padding: 140px 40px 100px; }
+
+    .page-badge {
+      display: inline-block;
+      background: rgba(255,235,59,0.1);
+      border: 1px solid rgba(255,235,59,0.25);
+      color: var(--yellow);
+      font-size: 12px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 6px 14px; border-radius: 20px; margin-bottom: 24px;
+    }
+
+    h1 { font-size: clamp(32px, 6vw, 48px); font-weight: 900; line-height: 1.1; margin-bottom: 20px; }
+    h1 span { color: var(--yellow); }
+    .intro { font-size: 17px; color: var(--gray1); margin-bottom: 48px; max-width: 560px; }
+
+    /* ── CONTACT CARDS ── */
+    .contact-grid { display: grid; gap: 16px; margin-bottom: 48px; }
+
+    .contact-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 28px;
+      display: flex; align-items: flex-start; gap: 20px;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .contact-card:hover { border-color: rgba(255,235,59,0.3); background: var(--surface2); }
+
+    .contact-icon { font-size: 28px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+    .contact-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .contact-card p { color: var(--gray1); font-size: 14px; margin-bottom: 10px; }
+    .contact-card a { color: var(--yellow); font-weight: 600; font-size: 15px; text-decoration: none; }
+    .contact-card a:hover { text-decoration: underline; }
+
+    /* ── FAQ ── */
+    .faq-title { font-size: 22px; font-weight: 800; margin-bottom: 20px; }
+    .faq-item { border-bottom: 1px solid var(--border); padding: 18px 0; }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+    .faq-a { color: var(--gray1); font-size: 14px; }
+    .faq-a a { color: var(--yellow); }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 32px 40px;
+      text-align: center;
+    }
+    .footer-copy { color: var(--gray2); font-size: 13px; }
+    .footer-copy a { color: var(--gray1); text-decoration: none; margin: 0 8px; }
+    .footer-copy a:hover { color: var(--white); }
+
+    @media (max-width: 600px) {
+      nav { padding: 14px 20px; }
+      .page { padding: 110px 20px 80px; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a href="/" class="nav-logo">
+      <span class="nav-logo-icon">🏆</span>
+      <div>
+        <div class="nav-logo-text">Queue Master</div>
+        <div class="nav-logo-by">by Jastly</div>
+      </div>
+    </a>
+    <ul class="nav-links">
+      <li><a href="/#features">Features</a></li>
+      <li><a href="/#how-it-works">How it works</a></li>
+      <li><button class="theme-toggle" id="themeToggle" title="Toggle light/dark mode">🌙</button></li>
+      <li><a href="https://app.jastly.com" class="btn-nav">Open App</a></li>
+    </ul>
+  </nav>
+
+  <main class="page">
+    <div class="page-badge">Get in touch</div>
+    <h1>We'd love to <span>hear from you</span></h1>
+    <p class="intro">Whether you've found a bug, have a feature idea, or just want to say hello — drop us a line. We read every message.</p>
+
+    <div class="contact-grid">
+      <div class="contact-card">
+        <div class="contact-icon">✉️</div>
+        <div>
+          <h3>General Enquiries</h3>
+          <p>Questions about the app, features, or how to get started.</p>
+          <a href="mailto:hello@jastly.com">hello@jastly.com</a>
+        </div>
+      </div>
+
+      <div class="contact-card">
+        <div class="contact-icon">🐛</div>
+        <div>
+          <h3>Bug Reports</h3>
+          <p>Found something broken? Tell us what happened and we'll fix it fast.</p>
+          <a href="mailto:hello@jastly.com?subject=Bug%20Report">hello@jastly.com</a>
+        </div>
+      </div>
+
+      <div class="contact-card">
+        <div class="contact-icon">🔒</div>
+        <div>
+          <h3>Privacy & Data Requests</h3>
+          <p>Requests to access, correct or delete your personal data.</p>
+          <a href="mailto:hello@jastly.com?subject=Data%20Request">hello@jastly.com</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="faq-title">Common Questions</p>
+    <div class="faq-item">
+      <div class="faq-q">How quickly will you reply?</div>
+      <div class="faq-a">We aim to respond within 1–2 business days. Bug reports are treated as urgent.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Is Queue Master free?</div>
+      <div class="faq-a">Yes — completely free to use on web, iOS and Android. No subscription, no hidden fees.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">Can I request a new sport or feature?</div>
+      <div class="faq-a">Absolutely. Email us with your idea and we'll review it for a future update.</div>
+    </div>
+    <div class="faq-item">
+      <div class="faq-q">How do I delete my account?</div>
+      <div class="faq-a">Email <a href="mailto:hello@jastly.com?subject=Delete%20My%20Account">hello@jastly.com</a> with the subject "Delete My Account" and we'll remove all your data within 30 days.</div>
+    </div>
+  </main>
+
+  <footer>
+    <p class="footer-copy">
+      © 2026 Jastly. All rights reserved. &nbsp;|&nbsp;
+      <a href="/">Home</a>
+      <a href="/privacy.html">Privacy Policy</a>
+      <a href="/contact.html">Contact</a>
+    </p>
+  </footer>
+
+  <script>
+    const toggle = document.getElementById('themeToggle');
+    const isLight = () => document.body.classList.contains('light');
+    const applyTheme = (light) => {
+      document.body.classList.toggle('light', light);
+      toggle.textContent = light ? '🌙' : '☀️';
+      localStorage.setItem('jastly-theme', light ? 'light' : 'dark');
+    };
+    applyTheme(localStorage.getItem('jastly-theme') === 'light');
+    toggle.addEventListener('click', () => applyTheme(!isLight()));
+  </script>
+</body>
+</html>
