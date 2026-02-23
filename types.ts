@@ -32,7 +32,7 @@ export interface Club {
   pick_limit: number;
   waiting_list: QueuePlayer[];
   court_occupants: Record<string, QueuePlayer[]>;
-  master_roster: Player[];
+  master_roster: any; // Player[] (legacy) or Record<string, Player[]> (sport-keyed)
   match_history: MatchRecord[];
   saved_queue: QueuePlayer[];
   join_password: string | null;

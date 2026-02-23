@@ -170,6 +170,7 @@ export default function Dashboard() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [tempSoundEnabled, setTempSoundEnabled] = useState(true);
   const [showPlayerProfile, setShowPlayerProfile] = useState<Player | null>(null);
+  const [showSportSetup, setShowSportSetup] = useState(false);
 
   // ─── Refs ────────────────────────────────────────────────────────────────
   const loggingEnabledRef = useRef(false);
@@ -201,7 +202,7 @@ export default function Dashboard() {
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
   // Sport config — derived from club state, defaults to badminton
-  const { emoji: sportEmoji, court: courtLabel, playersPerGame } = useMemo(
+  const { emoji: sportEmoji, court: courtLabel, playersPerGame, label: sportLabel } = useMemo(
     () => getSportConfig(club?.sport), [club?.sport]
   );
 
@@ -227,6 +228,21 @@ export default function Dashboard() {
 
   const sanitiseName = (n: string) =>
     (n || '').replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
+
+  // Per-sport roster helpers — master_roster can be legacy Player[] or Record<sport, Player[]>
+  const getRoster = (c: Club | null): Player[] => {
+    if (!c) return [];
+    const sportK = c.sport || 'badminton';
+    const mr = (c as any).master_roster;
+    if (!mr) return [];
+    if (Array.isArray(mr)) return sportK === 'badminton' ? mr : [];
+    return (mr[sportK] || []) as Player[];
+  };
+
+  const updateRoster = (mr: any, sport: string, players: Player[]): Record<string, Player[]> => {
+    const base: Record<string, Player[]> = Array.isArray(mr) ? { badminton: mr } : { ...(mr || {}) };
+    return { ...base, [sport]: players };
+  };
 
   // ─── Notifications ────────────────────────────────────────────────────────
   const requestNotificationPermission = async () => {
@@ -278,7 +294,7 @@ export default function Dashboard() {
     if (!club) return;
     const matchCount = (club.match_history || []).length;
     const dateStr = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-    const top = [...(club.master_roster || [])]
+    const top = [...getRoster(club)]
       .filter((p: Player) => p.games > 0)
       .sort((a, b) => (b.wins / Math.max(1, b.games)) - (a.wins / Math.max(1, a.games)))
       .slice(0, 5);
@@ -426,12 +442,17 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [isHost, myName]);
 
-  // Startup modal — once per mount
+  // Startup modal — once per mount; show sport setup first if club has no sport set yet
   useEffect(() => {
     if (!isHost || !club || hasShownStartupRef.current) return;
     hasShownStartupRef.current = true;
     setStartupCourts(club.active_courts || 4);
-    setShowStartup(true);
+    if (!club.sport) {
+      setTempSport('badminton');
+      setShowSportSetup(true);
+    } else {
+      setShowStartup(true);
+    }
   }, [isHost, club]);
 
   // ─── Cache club state for offline support ────────────────────────────────
@@ -523,11 +544,18 @@ export default function Dashboard() {
     const next: Club = {
       ...prev,
       waiting_list: [...(prev.waiting_list || [])],
-      master_roster: [...(prev.master_roster || [])],
+      master_roster: Array.isArray(prev.master_roster)
+        ? { badminton: [...prev.master_roster] }
+        : { ...((prev.master_roster as any) || {}) },
       court_occupants: { ...(prev.court_occupants || {}) },
       match_history: [...(prev.match_history || [])],
     };
     const { action, payload } = req;
+    const sportKey = (next.sport || 'badminton') as string;
+    const mr = () => (((next.master_roster as any)[sportKey] || []) as Player[]);
+    const updateMR = (fn: (arr: Player[]) => Player[]) => {
+      (next.master_roster as any)[sportKey] = fn(mr());
+    };
     const logs: string[] = [];
     const requesterName = sanitiseName(payload?.name || '');
     const requesterIsPowerGuest = next.waiting_list.some(
@@ -569,9 +597,9 @@ export default function Dashboard() {
           logs.push(`SECURITY: ${requesterName} tried to add ${pName} — blocked.`);
           return;
         }
-        const inRoster = next.master_roster.some((m: any) => m.name === pName);
+        const inRoster = mr().some((m: any) => m.name === pName);
         if (!inRoster) {
-          next.master_roster.push({ name: pName, gender: p.gender || 'M', games: 0, wins: 0 });
+          updateMR(r => [...r, { name: pName, gender: p.gender || 'M', games: 0, wins: 0 }]);
         }
         if (!next.waiting_list.find((x: any) => x.name === pName)) {
           next.waiting_list.push({ name: pName, gender: p.gender || 'M', isResting: false });
@@ -645,8 +673,8 @@ export default function Dashboard() {
       next.court_occupants[cIdx.toString()] = validPlayers;
       next.waiting_list = next.waiting_list.filter((w: any) => !pNames.includes(w.name));
       validPlayers.forEach((p: any) => {
-        const mIdx = next.master_roster.findIndex((m: any) => m.name === p.name);
-        if (mIdx !== -1) next.master_roster[mIdx] = { ...next.master_roster[mIdx], games: (next.master_roster[mIdx].games || 0) + 1 };
+        const cur = mr(); const mIdx = cur.findIndex((m: any) => m.name === p.name);
+        if (mIdx !== -1) updateMR(r => r.map((m, i) => i === mIdx ? { ...m, games: (m.games || 0) + 1 } : m));
       });
       const sportCfg = getSportConfig(next.sport);
       logs.push(`MATCH: ${sportCfg.court} ${cIdx + 1} started.`);
@@ -669,8 +697,8 @@ export default function Dashboard() {
       const validWinners: string[] = Array.isArray(matchWinners)
         ? matchWinners.filter((w: string) => courtPlayerNames.includes(w)).slice(0, 2) : [];
       validWinners.forEach((wName: string) => {
-        const mIdx = next.master_roster.findIndex((m: any) => m.name === wName);
-        if (mIdx !== -1) next.master_roster[mIdx] = { ...next.master_roster[mIdx], wins: (next.master_roster[mIdx].wins || 0) + 1 };
+        const cur = mr(); const mIdx = cur.findIndex((m: any) => m.name === wName);
+        if (mIdx !== -1) updateMR(r => r.map((m, i) => i === mIdx ? { ...m, wins: (m.wins || 0) + 1 } : m));
       });
       const finishHalf = Math.floor(courtPlayers.length / 2);
       const team1 = courtPlayers.slice(0, finishHalf).map((p: any) => p.name);
@@ -763,7 +791,7 @@ export default function Dashboard() {
     return !inQueue && !onCourt;
   };
 
-  const roster = club?.master_roster || [];
+  const roster = getRoster(club);
 
   const displayRoster = roster
     .filter((p: any) => {
@@ -806,29 +834,31 @@ export default function Dashboard() {
     if (!rawName) return;
     const clean = rawName.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
     if (!clean) { Alert.alert('Invalid name', 'Name must contain letters or numbers.'); return; }
-    const currentRoster = club?.master_roster || [];
+    const sportK = club?.sport || 'badminton';
+    const currentRoster = getRoster(club);
     const currentQueue = club?.waiting_list || [];
-    let nextRoster = [...currentRoster];
+    let nextRosterArr = [...currentRoster];
     let nextQueue = [...currentQueue];
     if (editingPlayerName) {
-      if (clean !== editingPlayerName && nextRoster.some((p: Player) => (p.name || '').toUpperCase() === clean)) {
+      if (clean !== editingPlayerName && nextRosterArr.some((p: Player) => (p.name || '').toUpperCase() === clean)) {
         Alert.alert('Duplicate', 'Name already exists!'); return;
       }
-      const rIdx = nextRoster.findIndex((p: Player) => p.name === editingPlayerName);
-      if (rIdx !== -1) nextRoster[rIdx] = { ...nextRoster[rIdx], name: clean, gender: newGender as 'M' | 'F' };
+      const rIdx = nextRosterArr.findIndex((p: Player) => p.name === editingPlayerName);
+      if (rIdx !== -1) nextRosterArr[rIdx] = { ...nextRosterArr[rIdx], name: clean, gender: newGender as 'M' | 'F' };
       const qIdx = nextQueue.findIndex((p: QueuePlayer) => p.name === editingPlayerName);
       if (qIdx !== -1) nextQueue[qIdx] = { ...nextQueue[qIdx], name: clean, gender: newGender as 'M' | 'F' };
     } else {
-      if (nextRoster.some((p: Player) => (p.name || '').toUpperCase() === clean)) {
+      if (nextRosterArr.some((p: Player) => (p.name || '').toUpperCase() === clean)) {
         Alert.alert('Duplicate', 'Player already exists!'); return;
       }
-      nextRoster.push({ name: clean, gender: newGender as 'M' | 'F', games: 0, wins: 0 });
+      nextRosterArr.push({ name: clean, gender: newGender as 'M' | 'F', games: 0, wins: 0 });
       addLog(`SYSTEM: Registered ${clean}.`);
     }
+    const nextRosterFull = updateRoster(club?.master_roster, sportK, nextRosterArr);
     setIsSavingPlayer(true);
     try {
-      setClub((prev: Club | null) => prev ? { ...prev, master_roster: nextRoster, waiting_list: nextQueue } : prev);
-      const { data, error } = await supabase.from('clubs').update({ master_roster: nextRoster, waiting_list: nextQueue }).eq('id', cidRef.current).select().single();
+      setClub((prev: Club | null) => prev ? { ...prev, master_roster: nextRosterFull, waiting_list: nextQueue } : prev);
+      const { data, error } = await supabase.from('clubs').update({ master_roster: nextRosterFull, waiting_list: nextQueue }).eq('id', cidRef.current).select().single();
       if (error) { Alert.alert('Save failed', error.message); return; }
       if (data) setClub(data as Club);
       setNewPlayerName(''); setEditingPlayerName(null); setSearchQuery(''); setShowNewPlayer(false);
@@ -842,10 +872,12 @@ export default function Dashboard() {
     Alert.alert('Confirm Delete', `Permanently delete ${name}?`, [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Delete', style: 'destructive', onPress: async () => {
-        const nextRoster = roster.filter((p: any) => p.name !== name);
+        const sportK = club!.sport || 'badminton';
+        const nextRosterArr = roster.filter((p: any) => p.name !== name);
+        const nextRosterFull = updateRoster(club!.master_roster, sportK, nextRosterArr);
         const nextQueue = club!.waiting_list?.filter((p: QueuePlayer) => p.name !== name) || [];
-        setClub((prev: any) => ({ ...prev, master_roster: nextRoster, waiting_list: nextQueue }));
-        await supabase.from('clubs').update({ master_roster: nextRoster, waiting_list: nextQueue }).eq('id', cidRef.current);
+        setClub((prev: any) => ({ ...prev, master_roster: nextRosterFull, waiting_list: nextQueue }));
+        await supabase.from('clubs').update({ master_roster: nextRosterFull, waiting_list: nextQueue }).eq('id', cidRef.current);
         addLog(`SYSTEM: Deleted ${name}.`);
       }},
     ]);
@@ -1070,8 +1102,8 @@ export default function Dashboard() {
     Alert.alert('WIPE ALL?', 'This permanently deletes all players and stats.', [
       { text: 'Cancel' },
       { text: 'DELETE ALL', style: 'destructive', onPress: async () => {
-        setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {}, master_roster: [], match_history: [] }));
-        await supabase.from('clubs').update({ waiting_list: [], court_occupants: {}, master_roster: [], match_history: [] }).eq('id', cidRef.current);
+        setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {}, master_roster: {}, match_history: [] }));
+        await supabase.from('clubs').update({ waiting_list: [], court_occupants: {}, master_roster: {}, match_history: [] }).eq('id', cidRef.current);
         setLogs([]); addLog('SYSTEM: Full Wipe.');
         secondsCounter.current = 0; currentTopPlayerRef.current = '';
         setShowSettings(false);
@@ -1083,7 +1115,7 @@ export default function Dashboard() {
   const exportStats = async () => {
     if (!club) return;
     const rows = [['Name', 'Gender', 'Games', 'Wins', 'Win Rate']];
-    (club?.master_roster || []).forEach((p: any) => {
+    getRoster(club).forEach((p: any) => {
       const rate = (p.games || 0) > 0 ? Math.round((p.wins / p.games) * 100) : 0;
       rows.push([p.name, p.gender || 'M', p.games || 0, p.wins || 0, `${rate}%`]);
     });
@@ -1197,7 +1229,7 @@ export default function Dashboard() {
   };
 
   // ─── Derived data ─────────────────────────────────────────────────────────
-  const leaderboard = [...(club?.master_roster || [])].sort((a: any, b: any) => {
+  const leaderboard = [...getRoster(club)].sort((a: any, b: any) => {
     const aRate = (a.games || 0) > 0 ? a.wins / a.games : 0;
     const bRate = (b.games || 0) > 0 ? b.wins / b.games : 0;
     return bRate - aRate;
@@ -1298,7 +1330,7 @@ export default function Dashboard() {
             <Image source={{ uri: club.club_logo_url }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }} />
           ) : null}
           <View>
-            <Text style={styles.title} numberOfLines={1}>{club.club_name || 'My Club'}</Text>
+            <Text style={styles.title} numberOfLines={1}>{club.club_name || `My ${sportLabel} Club`}</Text>
             {isHost && hostNickname && hostNickname !== 'Host' ? (
               <Text style={{ color: colors.gray3, fontSize: 11 }}>Host: {hostNickname}</Text>
             ) : null}
@@ -2355,6 +2387,45 @@ export default function Dashboard() {
               <TouchableOpacity onPress={() => { setShowEnterPin(false); setEnterPinInput(''); setPendingPinAction(null); }}><Text style={{ color: colors.gray1 }}>CANCEL</Text></TouchableOpacity>
               <TouchableOpacity onPress={verifyPin}><Text style={{ color: colors.primary, fontWeight: 'bold' }}>UNLOCK</Text></TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ==================================================================
+          FIRST-TIME SPORT SETUP MODAL (host only, new clubs)
+      ================================================================== */}
+      <Modal visible={showSportSetup} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>WELCOME! CHOOSE YOUR SPORT</Text>
+            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 16 }}>
+              This customises the app for your session — you can change it any time in Settings.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 20 }}>
+              {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
+                <TouchableOpacity
+                  key={key}
+                  onPress={() => setTempSport(key)}
+                  style={[styles.sportChip, tempSport === key && styles.sportChipActive]}
+                >
+                  <Text style={{ fontSize: 22 }}>{s.emoji}</Text>
+                  <Text style={{ color: tempSport === key ? colors.black : colors.gray2, fontSize: 11, marginTop: 2 }}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.btnPrimary, { padding: 14 }]}
+              onPress={async () => {
+                await supabase.from('clubs').update({ sport: tempSport }).eq('id', cidRef.current);
+                setClub((prev: any) => ({ ...prev, sport: tempSport }));
+                setShowSportSetup(false);
+                setShowStartup(true);
+              }}
+            >
+              <Text style={[styles.btnText, { textAlign: 'center', fontSize: 14 }]}>
+                {getSportConfig(tempSport).emoji}  START WITH {getSportConfig(tempSport).label.toUpperCase()}
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
