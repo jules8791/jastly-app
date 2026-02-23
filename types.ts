@@ -13,9 +13,10 @@ export interface QueuePlayer {
 }
 
 export interface MatchRecord {
-  team1: [string, string];
-  team2: [string, string];
+  team1: string[];
+  team2: string[];
   winners: string[];
+  court?: number;
   timestamp?: string;
 }
 
@@ -40,4 +41,5 @@ export interface Club {
   gender_balanced: boolean;
   avoid_repeats: boolean;
   power_guest_pin: string | null;
+  sport?: string | null;
 }

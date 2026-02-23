@@ -1,15 +1,69 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-GB">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Queue Master — Badminton Club Queue App by Jastly</title>
-  <meta name="description" content="Queue Master is the smart queue management app for badminton clubs. Real-time courts, player queues, leaderboards and more. Free to download." />
-  <meta property="og:title" content="Queue Master — Badminton Queue App" />
-  <meta property="og:description" content="Run your badminton club's courts and queues like a pro. Real-time, zero paper, works on any phone." />
+
+  <!-- Primary Meta -->
+  <title>Queue Master — Sports Club Queue Management App | Free | Jastly</title>
+  <meta name="description" content="Queue Master is the free queue management app for sports clubs. Manage courts, player rotations and leaderboards in real time. Works for Badminton, Table Tennis, Pickleball, Squash, Tennis, Padel, Darts and more." />
+  <meta name="keywords" content="sports club queue app, badminton queue management, court rotation app, table tennis queue, pickleball app, squash club app, sports session management, player rotation app, badminton club software, queue master" />
+  <meta name="author" content="Jastly" />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://www.jastly.com" />
+
+  <!-- hreflang -->
+  <link rel="alternate" hreflang="en" href="https://www.jastly.com" />
+  <link rel="alternate" hreflang="en-gb" href="https://www.jastly.co.uk" />
+  <link rel="alternate" hreflang="x-default" href="https://www.jastly.com" />
+
+  <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://www.jastly.com" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏸</text></svg>" />
+  <meta property="og:site_name" content="Queue Master by Jastly" />
+  <meta property="og:locale" content="en_GB" />
+  <meta property="og:title" content="Queue Master — Free Sports Club Queue Management App" />
+  <meta property="og:description" content="Manage courts, queues and player rotations in real time. Works for Badminton, Table Tennis, Pickleball, Squash, Tennis, Padel, Darts and more. Free to use." />
+  <meta property="og:image" content="https://www.jastly.com/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Queue Master app — sports club queue management" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Queue Master — Free Sports Club Queue App" />
+  <meta name="twitter:description" content="Real-time courts, queues and leaderboards for any sports club. Badminton, Table Tennis, Pickleball, Squash and more. Free." />
+  <meta name="twitter:image" content="https://www.jastly.com/og-image.png" />
+  <meta name="twitter:image:alt" content="Queue Master app screenshot" />
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Queue Master",
+    "alternateName": "Queue Master by Jastly",
+    "applicationCategory": "SportsApplication",
+    "operatingSystem": "iOS, Android, Web",
+    "description": "Smart queue management app for sports clubs. Manage court rotations, player queues and leaderboards in real time. Works for Badminton, Table Tennis, Pickleball, Squash, Tennis, Padel, Darts and more.",
+    "url": "https://www.jastly.com",
+    "screenshot": "https://www.jastly.com/og-image.png",
+    "featureList": "Real-time court management, Player queue rotation, Leaderboards, QR code joining, Gender-balanced auto-pick, Multi-sport support",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "GBP"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "Jastly",
+      "url": "https://www.jastly.com",
+      "email": "hello@jastly.com"
+    }
+  }
+  </script>
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
@@ -182,8 +236,25 @@
       font-size: 18px;
       color: var(--gray1);
       line-height: 1.7;
-      margin-bottom: 40px;
+      margin-bottom: 20px;
       max-width: 480px;
+    }
+
+    .sports-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 36px;
+    }
+
+    .sports-row span {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 13px;
+      color: var(--gray1);
+      white-space: nowrap;
     }
 
     .hero-cta {
@@ -860,14 +931,24 @@
     <div class="hero-content">
       <div>
         <div class="hero-badge">
-          🏸 Built for badminton clubs
+          🏸🏓🎾🎱 Built for any racket & court sport
         </div>
         <h1 class="hero-title">
           Run your<br /><span>courts smarter.</span>
         </h1>
         <p class="hero-subtitle">
-          Queue Master handles your courts, queues, and player rotations in real time — so you can focus on the game, not the clipboard.
+          Queue Master handles your courts, queues, and player rotations in real time — for any racket or court sport. Focus on the game, not the clipboard.
         </p>
+        <div class="sports-row">
+          <span>🏸 Badminton</span>
+          <span>🏓 Table Tennis</span>
+          <span>🎾 Tennis</span>
+          <span>🥒 Pickleball</span>
+          <span>🎱 Pool</span>
+          <span>🎯 Darts</span>
+          <span>🏐 Volleyball</span>
+          <span>+ more</span>
+        </div>
         <div class="hero-cta">
           <a href="#download" class="btn-primary">
             📱 Download Free
@@ -1095,7 +1176,7 @@
             <div class="testimonial-avatar">👤</div>
             <div>
               <div class="testimonial-name">Sports Centre Coach</div>
-              <div class="testimonial-role">University Badminton Society</div>
+              <div class="testimonial-role">University Sports Society</div>
             </div>
           </div>
         </div>
@@ -1106,7 +1187,7 @@
             <div class="testimonial-avatar">👤</div>
             <div>
               <div class="testimonial-name">Club Captain</div>
-              <div class="testimonial-role">Friday Doubles · 4 courts</div>
+              <div class="testimonial-role">Friday Doubles Club · 4 courts</div>
             </div>
           </div>
         </div>
@@ -1164,7 +1245,7 @@
               <div class="nav-logo-by">by Jastly</div>
             </div>
           </div>
-          <p class="footer-tagline">The smart queue management app for badminton clubs. Run your courts, not your admin.</p>
+          <p class="footer-tagline">The smart queue management app for sports clubs. Run your courts, not your admin.</p>
         </div>
         <div class="footer-links-group">
           <div class="footer-links-col">

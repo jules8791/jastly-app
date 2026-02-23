@@ -53,11 +53,25 @@ export default function WelcomeScreen() {
   const [authPassword, setAuthPassword] = useState('');
   const [authConfirmPassword, setAuthConfirmPassword] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [authNickname, setAuthNickname] = useState('');
+
+  // Simple math captcha for account creation
+  const [captchaA, setCaptchaA] = useState(0);
+  const [captchaB, setCaptchaB] = useState(0);
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+
+  const refreshCaptcha = () => {
+    setCaptchaA(Math.floor(Math.random() * 9) + 1);
+    setCaptchaB(Math.floor(Math.random() * 9) + 1);
+    setCaptchaAnswer('');
+  };
 
   const switchAuthMode = (mode: 'signin' | 'create' | 'reset') => {
     setAuthMode(mode);
     setAuthPassword('');
     setAuthConfirmPassword('');
+    setAuthNickname('');
+    if (mode === 'create') refreshCaptcha();
   };
 
   useEffect(() => {
@@ -188,29 +202,59 @@ export default function WelcomeScreen() {
         Alert.alert('Passwords Do Not Match', 'Please make sure both passwords are identical.');
         return;
       }
+      if (parseInt(captchaAnswer, 10) !== captchaA + captchaB) {
+        Alert.alert('Incorrect Answer', 'Please solve the sum correctly to prove you\'re human.');
+        refreshCaptcha();
+        return;
+      }
     }
     setIsAuthLoading(true);
     try {
       let uid: string | null = null;
 
       if (authMode === 'create') {
+        const nickname = authNickname.trim() || 'Host';
         const { data, error } = await supabase.auth.signUp({
           email: authEmail.trim().toLowerCase(),
           password: authPassword,
+          options: { data: { nickname } },
         });
         if (error) { Alert.alert('Sign Up Error', error.message); return; }
-        uid = data.user?.id ?? null;
-        if (!uid) {
-          Alert.alert('Verify Email', 'Check your inbox and confirm your email, then sign in.');
-          switchAuthMode('signin');
+        // If no session, email confirmation is required — never reveal the email in UI
+        if (!data.session) {
+          Alert.alert(
+            'Confirm Your Email',
+            'We\'ve sent a confirmation link to your email address.\n\nClick the link to verify your account, then come back and sign in.',
+            [{ text: 'OK', onPress: () => switchAuthMode('signin') }]
+          );
           return;
         }
+        uid = data.user?.id ?? null;
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: authEmail.trim().toLowerCase(),
           password: authPassword,
         });
-        if (error) { Alert.alert('Sign In Error', error.message); return; }
+        if (error) {
+          // Email not yet confirmed — block and offer resend
+          if (error.message.toLowerCase().includes('email not confirmed') ||
+              error.message.toLowerCase().includes('not confirmed')) {
+            Alert.alert(
+              'Email Not Verified',
+              'You need to verify your email before signing in.\n\nCheck your inbox for the confirmation link.',
+              [
+                { text: 'Resend Email', onPress: async () => {
+                  await supabase.auth.resend({ type: 'signup', email: authEmail.trim().toLowerCase() });
+                  Alert.alert('Email Sent', 'A new confirmation link has been sent to your inbox.');
+                }},
+                { text: 'OK', style: 'cancel' },
+              ]
+            );
+          } else {
+            Alert.alert('Sign In Error', error.message);
+          }
+          return;
+        }
         uid = data.user?.id ?? null;
       }
 
@@ -475,7 +519,7 @@ export default function WelcomeScreen() {
   if (isLoading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.header}>🏸 QUEUE MASTER</Text>
+        <Text style={styles.header}>🏆 QUEUE MASTER</Text>
         <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
@@ -483,7 +527,7 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>🏸 QUEUE MASTER</Text>
+      <Text style={styles.header}>🏆 QUEUE MASTER</Text>
 
       <ScrollView showsVerticalScrollIndicator={false}>
         {/* HOST BUTTONS */}
@@ -686,15 +730,40 @@ export default function WelcomeScreen() {
                     autoComplete={authMode === 'create' ? 'new-password' : 'current-password'}
                   />
                   {authMode === 'create' && (
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Confirm Password"
-                      placeholderTextColor={colors.gray3}
-                      value={authConfirmPassword}
-                      onChangeText={setAuthConfirmPassword}
-                      secureTextEntry
-                      autoComplete="new-password"
-                    />
+                    <>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Nickname (shown to players)"
+                        placeholderTextColor={colors.gray3}
+                        value={authNickname}
+                        onChangeText={setAuthNickname}
+                        autoCapitalize="words"
+                        maxLength={30}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Confirm Password"
+                        placeholderTextColor={colors.gray3}
+                        value={authConfirmPassword}
+                        onChangeText={setAuthConfirmPassword}
+                        secureTextEntry
+                        autoComplete="new-password"
+                      />
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 10 }}>
+                        <Text style={{ color: colors.gray2, fontSize: 14, flex: 1 }}>
+                          Prove you're human: {captchaA} + {captchaB} =
+                        </Text>
+                        <TextInput
+                          style={[styles.input, { flex: 0, width: 70, marginBottom: 0, textAlign: 'center' }]}
+                          placeholder="?"
+                          placeholderTextColor={colors.gray3}
+                          value={captchaAnswer}
+                          onChangeText={setCaptchaAnswer}
+                          keyboardType="number-pad"
+                          maxLength={3}
+                        />
+                      </View>
+                    </>
                   )}
 
                   {authMode === 'signin' && (

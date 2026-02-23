@@ -1,4 +1,12 @@
 -- ============================================================
+-- Queue Master (Jastly) — Schema Migrations
+-- Run BEFORE the RLS policies below if not already applied.
+-- ============================================================
+
+-- Add sport column (safe to re-run)
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS sport TEXT DEFAULT 'badminton';
+
+-- ============================================================
 -- Queue Master (Jastly) — Row Level Security Policies
 -- Run this in the Supabase SQL Editor (Dashboard → SQL Editor)
 -- Safe to re-run: drops existing policies before recreating.

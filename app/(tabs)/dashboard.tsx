@@ -58,6 +58,7 @@ import { ColorSet } from '../../contexts/theme-context';
 import { useTheme } from '../../contexts/theme-context';
 import { supabase } from '../../supabase';
 import { Club, CourtResult, Player, QueuePlayer } from '../../types';
+import { getSportConfig, SPORTS } from '../../constants/sports';
 
 // Configure local notifications
 Notifications.setNotificationHandler({
@@ -78,6 +79,7 @@ export default function Dashboard() {
 
   // ─── Core identity ────────────────────────────────────────────────────────
   const [isHost, setIsHost] = useState(false);
+  const [hostNickname, setHostNickname] = useState('');
   const [club, setClub] = useState<Club | null>(null);
   const [myName, setMyName] = useState('');
   const cidRef = useRef('');
@@ -121,6 +123,7 @@ export default function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [tempClubName, setTempClubName] = useState('');
   const [tempCourts, setTempCourts] = useState(4);
+  const [tempSport, setTempSport] = useState('badminton');
   const [tempLimit, setTempLimit] = useState(20);
   const [tempTtsVoice, setTempTtsVoice] = useState('en-US');
   const [tempRepeat, setTempRepeat] = useState(false);
@@ -197,8 +200,13 @@ export default function Dashboard() {
   useEffect(() => { myNameRef.current = myName; }, [myName]);
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
-  // Auto-open court selection popup the moment 4 players are tapped
-  useEffect(() => { if (selectedQueueIdx.length === 4) setShowCourts(true); }, [selectedQueueIdx]);
+  // Sport config — derived from club state, defaults to badminton
+  const { emoji: sportEmoji, court: courtLabel, playersPerGame } = useMemo(
+    () => getSportConfig(club?.sport), [club?.sport]
+  );
+
+  // Auto-open court selection popup when correct number of players are tapped
+  useEffect(() => { if (selectedQueueIdx.length === playersPerGame) setShowCourts(true); }, [selectedQueueIdx, playersPerGame]);
 
   // Two-column layout on wide web screens
   const isWideWeb = Platform.OS === 'web' && screenWidth > 900;
@@ -275,7 +283,8 @@ export default function Dashboard() {
       .sort((a, b) => (b.wins / Math.max(1, b.games)) - (a.wins / Math.max(1, a.games)))
       .slice(0, 5);
 
-    let text = `🏸 ${club.club_name || 'Badminton Session'} — ${dateStr}\n\n`;
+    const sc = getSportConfig(club.sport);
+    let text = `${sc.emoji} ${club.club_name || `${sc.label} Session`} — ${dateStr}\n\n`;
     text += `Matches played: ${matchCount}\n`;
     text += `Players in queue: ${(club.waiting_list || []).filter((p: any) => !p.isResting).length}\n`;
     if (top.length > 0) {
@@ -286,7 +295,7 @@ export default function Dashboard() {
         text += `${medal} ${p.name}  ${p.wins}W / ${p.games}G  (${rate}%)\n`;
       });
     }
-    text += `\nManaged with Queue Master 🏸`;
+    text += `\nManaged with Queue Master ${sc.emoji}`;
     try { await Share.share({ message: text }); } catch {}
   };
 
@@ -341,6 +350,8 @@ export default function Dashboard() {
       const { data: sessionData } = await supabase.auth.getSession();
       const myUid = sessionData?.session?.user?.id || '';
       const isActuallyHost = hStatus || (!!myUid && data.host_uid === myUid);
+      const nickname = sessionData?.session?.user?.user_metadata?.nickname;
+      if (nickname) setHostNickname(nickname);
       if (isActuallyHost !== hStatus) {
         await AsyncStorage.setItem('isHost', isActuallyHost ? 'true' : 'false');
       }
@@ -357,7 +368,8 @@ export default function Dashboard() {
               const firstActive = queue.find((w: any) => !w.isResting);
               if (firstActive?.name === myNameRef.current) {
                 setIsMyTurnBanner(true);
-                sendLocalNotification("🏸 Your Turn!", "It's your turn to pick a court.");
+                const sc = getSportConfig((p.new as any).sport);
+                sendLocalNotification(`${sc.emoji} Your Turn!`, `It's your turn to pick a ${sc.court.toLowerCase()}.`);
                 if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 playChime();
               } else {
@@ -605,16 +617,18 @@ export default function Dashboard() {
       next.court_occupants[cIdx] = courtPlayers;
       next.waiting_list = next.waiting_list.filter((p: any) => p.name !== inPlayer);
       next.waiting_list.push({ ...outPlayerObj, isResting: false });
-      logs.push(`SUB: ${outPlayer} ↔ ${inPlayer} on Court ${parseInt(cIdx) + 1}.`);
-      return { next, logs, speech: `${inPlayer} is substituting ${outPlayer} on court ${parseInt(cIdx) + 1}.` };
+      const subCourt = getSportConfig(next.sport).court;
+      logs.push(`SUB: ${outPlayer} ↔ ${inPlayer} on ${subCourt} ${parseInt(cIdx) + 1}.`);
+      return { next, logs, speech: `${inPlayer} is substituting ${outPlayer} on ${subCourt.toLowerCase()} ${parseInt(cIdx) + 1}.` };
     } else if (action === 'start_match') {
       const { courtIdx, players } = payload;
       const cIdx = parseInt(courtIdx);
       if (isNaN(cIdx) || cIdx < 0 || cIdx >= (next.active_courts || 10)) return null;
       if (next.court_occupants[cIdx.toString()]) return null;
-      if (!Array.isArray(players) || players.length !== 4) return null;
+      const sportPlayers = getSportConfig(next.sport).playersPerGame;
+      if (!Array.isArray(players) || players.length !== sportPlayers) return null;
       const pNames: string[] = players.map((p: any) => sanitiseName(p.name));
-      if (new Set(pNames).size !== 4 || pNames.some(n => !n)) return null;
+      if (new Set(pNames).size !== sportPlayers || pNames.some(n => !n)) return null;
       if (!elevated) {
         if (!pNames.includes(requesterName)) return null;
         const firstActive = next.waiting_list.find((w: any) => !w.isResting);
@@ -634,9 +648,14 @@ export default function Dashboard() {
         const mIdx = next.master_roster.findIndex((m: any) => m.name === p.name);
         if (mIdx !== -1) next.master_roster[mIdx] = { ...next.master_roster[mIdx], games: (next.master_roster[mIdx].games || 0) + 1 };
       });
-      logs.push(`MATCH: Court ${cIdx + 1} started.`);
-      const [p1, p2, p3, p4] = pNames;
-      let msg = `Court ${cIdx + 1} ready. ${p1} and ${p2} versus ${p3} and ${p4}.`;
+      const sportCfg = getSportConfig(next.sport);
+      logs.push(`MATCH: ${sportCfg.court} ${cIdx + 1} started.`);
+      const half = Math.floor(pNames.length / 2);
+      const t1Names = pNames.slice(0, half);
+      const t2Names = pNames.slice(half);
+      const teamStr = (names: string[]) =>
+        names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
+      let msg = `${sportCfg.court} ${cIdx + 1} ready. ${teamStr(t1Names)} versus ${teamStr(t2Names)}.`;
       const nextActive = next.waiting_list.find((w: any) => !w.isResting);
       if (nextActive) msg += ` Next up is ${nextActive.name}.`;
       return { next, logs, speech: msg, resetTimers: true };
@@ -653,8 +672,9 @@ export default function Dashboard() {
         const mIdx = next.master_roster.findIndex((m: any) => m.name === wName);
         if (mIdx !== -1) next.master_roster[mIdx] = { ...next.master_roster[mIdx], wins: (next.master_roster[mIdx].wins || 0) + 1 };
       });
-      const team1 = courtPlayers.slice(0, 2).map((p: any) => p.name);
-      const team2 = courtPlayers.slice(2, 4).map((p: any) => p.name);
+      const finishHalf = Math.floor(courtPlayers.length / 2);
+      const team1 = courtPlayers.slice(0, finishHalf).map((p: any) => p.name);
+      const team2 = courtPlayers.slice(finishHalf).map((p: any) => p.name);
       next.match_history = [
         { date: new Date().toISOString(), court: parseInt(cIdx) + 1, team1, team2, winners: validWinners } as any,
         ...next.match_history,
@@ -662,7 +682,7 @@ export default function Dashboard() {
       next.waiting_list = [...next.waiting_list, ...courtPlayers];
       delete next.court_occupants[cIdx];
       next.saved_queue = [...next.waiting_list];
-      logs.push(`MATCH: Court ${parseInt(cIdx) + 1} finished. Winners: ${validWinners.join(', ') || 'none'}`);
+      logs.push(`MATCH: ${getSportConfig(next.sport).court} ${parseInt(cIdx) + 1} finished. Winners: ${validWinners.join(', ') || 'none'}`);
       return { next, logs, resetTimers: true };
     }
 
@@ -839,20 +859,21 @@ export default function Dashboard() {
       .map((p: any, i: number) => ({ ...p, queueIdx: i }))
       .filter((p: any, i: number) => !p.isResting && i < limit);
 
-    if (eligible.length < 4) { Alert.alert('Notice', 'Not enough active players in range.'); return; }
+    if (eligible.length < playersPerGame) { Alert.alert('Notice', `Not enough active players in range (need ${playersPerGame}).`); return; }
 
     let selected: any[] = [];
+    const half = Math.floor(playersPerGame / 2);
 
-    if (genderBalanced) {
+    if (genderBalanced && half >= 1) {
       const males = eligible.filter((p: any) => p.gender !== 'F');
       const females = eligible.filter((p: any) => p.gender === 'F');
-      if (males.length >= 2 && females.length >= 2) {
-        selected = [males[0], males[1], females[0], females[1]];
+      if (males.length >= half && females.length >= half) {
+        selected = [...males.slice(0, half), ...females.slice(0, half)];
       } else {
-        selected = eligible.slice(0, 4);
+        selected = eligible.slice(0, playersPerGame);
       }
     } else {
-      selected = eligible.slice(0, 4);
+      selected = eligible.slice(0, playersPerGame);
     }
 
     // Avoid repeat opponents: if any 2 selected players played together last game, swap last pick
@@ -944,6 +965,7 @@ export default function Dashboard() {
     setTempClubPassword(''); // never pre-fill with stored hash
     setTempPowerGuestEnabled(!!(club.power_guest_pin));
     setTempSoundEnabled(soundEnabled);
+    setTempSport(club.sport || 'badminton');
     setShowSettings(true);
   };
 
@@ -960,6 +982,7 @@ export default function Dashboard() {
       gender_balanced: tempGenderBalanced,
       avoid_repeats: tempAvoidRepeats,
       join_password: hashedPassword,
+      sport: tempSport,
     }));
     const { data: sessionData } = await supabase.auth.getSession();
     const myUid = sessionData?.session?.user?.id;
@@ -970,6 +993,7 @@ export default function Dashboard() {
       gender_balanced: tempGenderBalanced,
       avoid_repeats: tempAvoidRepeats,
       join_password: hashedPassword,
+      sport: tempSport,
       ...(myUid ? { host_uid: myUid } : {}),
     }).eq('id', cidRef.current);
     // Power guest PIN is managed separately via the toggle in settings
@@ -1243,7 +1267,7 @@ export default function Dashboard() {
           style={{ backgroundColor: colors.green, padding: 12, alignItems: 'center' }}
           onPress={() => setIsMyTurnBanner(false)}
         >
-          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 16 }}>🏸 IT'S YOUR TURN TO PICK A COURT! (tap to dismiss)</Text>
+          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 16 }}>{sportEmoji} IT'S YOUR TURN TO PICK A {courtLabel.toUpperCase()}! (tap to dismiss)</Text>
         </TouchableOpacity>
       )}
 
@@ -1275,6 +1299,9 @@ export default function Dashboard() {
           ) : null}
           <View>
             <Text style={styles.title} numberOfLines={1}>{club.club_name || 'My Club'}</Text>
+            {isHost && hostNickname && hostNickname !== 'Host' ? (
+              <Text style={{ color: colors.gray3, fontSize: 11 }}>Host: {hostNickname}</Text>
+            ) : null}
             <Text style={styles.idText}>ID: {club.id}  (tap for QR)</Text>
           </View>
         </TouchableOpacity>
@@ -1354,7 +1381,7 @@ export default function Dashboard() {
                         onPress={() => isBusy ? setShowResult({ courtIdx: i.toString(), players }) : null}
                       >
                         <Text style={[styles.courtTitle, { fontSize: titleFontSize }]} numberOfLines={1}>
-                          COURT {i + 1}
+                          {courtLabel.toUpperCase()} {i + 1}
                         </Text>
                         {isBusy ? (
                           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -1407,7 +1434,7 @@ export default function Dashboard() {
                 <TouchableOpacity onPress={handleAutoPick}>
                   <Text style={styles.btnPrimaryText}>AUTO-PICK{genderBalanced ? ' ⚧' : ''}{avoidRepeats ? ' 🔄' : ''}</Text>
                 </TouchableOpacity>
-                <Text style={{ color: colors.gray3, fontSize: 10, alignSelf: 'center' }}>or tap 4 players</Text>
+                <Text style={{ color: colors.gray3, fontSize: 10, alignSelf: 'center' }}>or tap {playersPerGame} players</Text>
                 {isPowerGuest && !isHost && (
                   <Text style={{ color: colors.primary, fontSize: 10, fontWeight: 'bold' }}>⚡</Text>
                 )}
@@ -1415,7 +1442,7 @@ export default function Dashboard() {
             )}
             {!isHost && !isPowerGuest && club.waiting_list?.find((w: any) => !w.isResting)?.name === (myNameRef.current || myName) && (
               <Text style={{ color: colors.green, fontSize: 11, marginTop: 4, fontWeight: 'bold' }}>
-                Tap 4 players — a popup will appear to assign a court
+                Tap {playersPerGame} players — a popup will appear to assign a {courtLabel.toLowerCase()}
               </Text>
             )}
           </View>
@@ -1451,7 +1478,7 @@ export default function Dashboard() {
                 if (!canSelect) return;
                 if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 if (isSelected) setSelectedQueueIdx(selectedQueueIdx.filter(x => x !== i));
-                else if (selectedQueueIdx.length < 4) setSelectedQueueIdx([...selectedQueueIdx, i]);
+                else if (selectedQueueIdx.length < playersPerGame) setSelectedQueueIdx([...selectedQueueIdx, i]);
               }}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -1744,7 +1771,7 @@ export default function Dashboard() {
                   <View style={{ marginBottom: 8 }}>
                     {onCourt ? (
                       <Text style={{ color: colors.green, textAlign: 'center', fontWeight: 'bold' }}>
-                        🎾 Playing on Court {parseInt(onCourt[0]) + 1}
+                        {sportEmoji} Playing on {courtLabel} {parseInt(onCourt[0]) + 1}
                       </Text>
                     ) : queuePos >= 0 ? (
                       <Text style={{ color: colors.primary, textAlign: 'center', fontWeight: 'bold' }}>
@@ -1774,6 +1801,20 @@ export default function Dashboard() {
             <View style={[styles.modalContent, { marginVertical: 20 }]}>
               <Text style={styles.modalTitle}>CLUB SETTINGS</Text>
 
+              <Text style={styles.sectionHeader}>SPORT</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
+                  <TouchableOpacity
+                    key={key}
+                    onPress={() => setTempSport(key)}
+                    style={[styles.sportChip, tempSport === key && styles.sportChipActive]}
+                  >
+                    <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
+                    <Text style={{ color: tempSport === key ? colors.black : colors.gray2, fontSize: 11, marginTop: 2 }}>{s.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
               <Text style={styles.sectionHeader}>CLUB</Text>
               <Text style={styles.label}>Club Name</Text>
               <TextInput style={styles.input} value={tempClubName} onChangeText={setTempClubName} />
@@ -1797,7 +1838,7 @@ export default function Dashboard() {
               />
 
               <View style={styles.settingsRow}>
-                <Text style={{ color: colors.white }}>Active Courts</Text>
+                <Text style={{ color: colors.white }}>Active {courtLabel}s</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <TouchableOpacity onPress={() => setTempCourts(Math.max(1, tempCourts - 1))} style={styles.mathBtn}><Text style={{ color: colors.white }}>-</Text></TouchableOpacity>
                   <Text style={{ color: colors.primary, marginHorizontal: 15, fontWeight: 'bold' }}>{tempCourts}</Text>
@@ -2027,7 +2068,7 @@ export default function Dashboard() {
                   style={[styles.modalItem, (isBusy || isProcessingAction) && { opacity: 0.3 }]}
                   onPress={() => assignCourt(i)}
                 >
-                  <Text style={{ color: colors.white, fontWeight: 'bold' }}>Court {i + 1}</Text>
+                  <Text style={{ color: colors.white, fontWeight: 'bold' }}>{courtLabel} {i + 1}</Text>
                   <Text style={{ color: isBusy ? colors.red : colors.green, fontWeight: 'bold' }}>
                     {isProcessingAction ? 'ASSIGNING...' : isBusy ? 'BUSY' : 'FREE — TAP TO ASSIGN'}
                   </Text>
@@ -2128,7 +2169,7 @@ export default function Dashboard() {
                   return (
                     <View key={i} style={{ padding: 12, borderBottomWidth: 1, borderBottomColor: colors.borderSoft }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <Text style={{ color: colors.gray2, fontSize: 11 }}>Court {m.court}  •  {timeStr}</Text>
+                        <Text style={{ color: colors.gray2, fontSize: 11 }}>{courtLabel} {m.court}  •  {timeStr}</Text>
                         {m.winners?.length > 0 && (
                           <Text style={{ color: colors.primary, fontSize: 11 }}>🏆 {m.winners.join(' & ')}</Text>
                         )}
@@ -2395,6 +2436,11 @@ const makeStyles = (C: ColorSet) => StyleSheet.create({
   btnDanger: { backgroundColor: C.red, padding: 8, borderRadius: 6 },
   btnText: { color: C.white, fontWeight: 'bold', fontSize: 12, textAlign: 'center' },
   mathBtn: { backgroundColor: C.border, paddingHorizontal: 15, paddingVertical: 5, borderRadius: 5 },
+  sportChip: {
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 10,
+    borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, marginRight: 8, minWidth: 72,
+  },
+  sportChipActive: { backgroundColor: C.primary, borderColor: C.primary },
   queueRow: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: C.surface, marginBottom: 5, borderRadius: 8, alignItems: 'center' },
   pName: { color: C.white, fontSize: 16, fontWeight: 'bold' },
   genderBadge: { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
