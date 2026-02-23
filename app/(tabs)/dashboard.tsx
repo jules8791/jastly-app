@@ -171,6 +171,7 @@ export default function Dashboard() {
   const [tempSoundEnabled, setTempSoundEnabled] = useState(true);
   const [showPlayerProfile, setShowPlayerProfile] = useState<Player | null>(null);
   const [showSportSetup, setShowSportSetup] = useState(false);
+  const [isEmailHost, setIsEmailHost] = useState(false);
 
   // ─── Refs ────────────────────────────────────────────────────────────────
   const loggingEnabledRef = useRef(false);
@@ -368,6 +369,9 @@ export default function Dashboard() {
       const isActuallyHost = hStatus || (!!myUid && data.host_uid === myUid);
       const nickname = sessionData?.session?.user?.user_metadata?.nickname;
       if (nickname) setHostNickname(nickname);
+      if (isActuallyHost && myUid && !sessionData?.session?.user?.is_anonymous) {
+        setIsEmailHost(true);
+      }
       if (isActuallyHost !== hStatus) {
         await AsyncStorage.setItem('isHost', isActuallyHost ? 'true' : 'false');
       }
@@ -2069,7 +2073,21 @@ export default function Dashboard() {
                 <Text style={[styles.btnText, { textAlign: 'center' }]}>SIGN OUT</Text>
               </TouchableOpacity>
 
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 30 }}>
+              {isEmailHost && (
+                <TouchableOpacity
+                  style={{ marginTop: 24, padding: 14, backgroundColor: colors.border, borderRadius: 8, alignItems: 'center' }}
+                  onPress={async () => {
+                    setShowSettings(false);
+                    await AsyncStorage.removeItem('currentClubId');
+                    router.replace('/');
+                  }}
+                >
+                  <Text style={{ color: colors.white, fontWeight: 'bold' }}>🏢  MY CLUBS</Text>
+                  <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 2 }}>Switch club or create a new one</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
                 <TouchableOpacity onPress={() => setShowSettings(false)}>
                   <Text style={{ color: colors.gray1 }}>CANCEL</Text>
                 </TouchableOpacity>
@@ -2245,21 +2263,11 @@ export default function Dashboard() {
           <View style={[styles.modalContent, { alignItems: 'center' }]}>
             <Text style={styles.modalTitle}>SHARE CLUB</Text>
             <Text style={{ color: colors.gray2, marginBottom: 20, textAlign: 'center' }}>Scan to join this session instantly</Text>
-            {Platform.OS !== 'web' ? (
-              <QRCode value={Linking.createURL('join', { queryParams: { clubId: club?.id } })} size={220} color={colors.primary} backgroundColor={colors.surface} />
-            ) : (
-              <Text selectable style={{ color: colors.primary, fontSize: 13, textAlign: 'center', marginVertical: 8 }}>
-                {`https://app.jastly.com/join?clubId=${club?.id}`}
-              </Text>
-            )}
-            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 12, textAlign: 'center' }}>
-              {Platform.OS !== 'web' ? 'Web link (share to browser users):' : 'Share this link — or the Club ID:'}
+            <QRCode value={`https://app.jastly.com/join?clubId=${club?.id}`} size={220} color={colors.primary} backgroundColor={colors.surface} />
+            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 14, textAlign: 'center' }}>Or share the link:</Text>
+            <Text selectable style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginTop: 3, marginBottom: 4 }}>
+              {`app.jastly.com/join?clubId=${club?.id}`}
             </Text>
-            {Platform.OS !== 'web' && (
-              <Text selectable style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginTop: 2, marginBottom: 4 }}>
-                {`app.jastly.com/join?clubId=${club?.id}`}
-              </Text>
-            )}
             <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 6, textAlign: 'center' }}>Club ID:</Text>
             <Text style={{ color: colors.primary, fontSize: 26, fontWeight: 'bold', letterSpacing: 4, marginTop: 6 }}>{club?.id}</Text>
             <TouchableOpacity style={{ marginTop: 25 }} onPress={() => setShowQR(false)}>
@@ -2300,21 +2308,11 @@ export default function Dashboard() {
           <View style={[styles.modalContent, { alignItems: 'center' }]}>
             <Text style={styles.modalTitle}>INVITE PLAYERS</Text>
             <Text style={{ color: colors.gray2, marginBottom: 20, textAlign: 'center' }}>Scan with phone camera to join instantly</Text>
-            {Platform.OS !== 'web' ? (
-              <QRCode value={Linking.createURL('join', { queryParams: { clubId: club?.id } })} size={220} color={colors.primary} backgroundColor={colors.surface} />
-            ) : (
-              <Text selectable style={{ color: colors.primary, fontSize: 13, textAlign: 'center', marginVertical: 8 }}>
-                {`https://app.jastly.com/join?clubId=${club?.id}`}
-              </Text>
-            )}
-            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 12, textAlign: 'center' }}>
-              {Platform.OS !== 'web' ? 'Web link (share to browser users):' : 'Share this link — or the Club ID:'}
+            <QRCode value={`https://app.jastly.com/join?clubId=${club?.id}`} size={220} color={colors.primary} backgroundColor={colors.surface} />
+            <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 14, textAlign: 'center' }}>Or share the link:</Text>
+            <Text selectable style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginTop: 3, marginBottom: 4 }}>
+              {`app.jastly.com/join?clubId=${club?.id}`}
             </Text>
-            {Platform.OS !== 'web' && (
-              <Text selectable style={{ color: colors.gray2, fontSize: 11, textAlign: 'center', marginTop: 2, marginBottom: 4 }}>
-                {`app.jastly.com/join?clubId=${club?.id}`}
-              </Text>
-            )}
             <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 6, textAlign: 'center' }}>Club ID:</Text>
             <Text style={{ color: colors.primary, fontSize: 26, fontWeight: 'bold', letterSpacing: 4, marginTop: 6 }}>{club?.id}</Text>
             <TouchableOpacity style={{ marginTop: 28 }} onPress={() => setShowJoinQR(false)}>

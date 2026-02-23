@@ -21,6 +21,7 @@ import {
 } from 'react-native';
 import { supabase } from '../supabase';
 import { ColorSet, useTheme } from '../contexts/theme-context';
+import { getSportConfig } from '../constants/sports';
 
 // Required to complete the OAuth redirect back into the app
 WebBrowser.maybeCompleteAuthSession();
@@ -30,6 +31,13 @@ interface RecentClub {
   name: string;
   myName: string;
   joinedAt: string;
+}
+
+interface MyClub {
+  id: string;
+  club_name: string | null;
+  sport: string | null;
+  active_courts: number | null;
 }
 
 export default function WelcomeScreen() {
@@ -55,6 +63,10 @@ export default function WelcomeScreen() {
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [authNickname, setAuthNickname] = useState('');
   const [authErrorMsg, setAuthErrorMsg] = useState('');
+
+  // Multi-club picker
+  const [myClubs, setMyClubs] = useState<MyClub[]>([]);
+  const [showClubPicker, setShowClubPicker] = useState(false);
 
   // Password recovery (from reset email link)
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
@@ -147,15 +159,19 @@ export default function WelcomeScreen() {
       if (savedName) setName(savedName);
       if (savedClubId) setClubId(savedClubId);
 
-      // Any non-anonymous host (email, Google, Apple) — restore their club
+      // Any non-anonymous host (email, Google, Apple) — restore their club(s)
       const { data: { session } } = await supabase.auth.getSession();
       if (session && !session.user.is_anonymous) {
-        const { data: club } = await supabase
-          .from('clubs').select('id').eq('host_uid', session.user.id).maybeSingle();
-        if (club) {
-          await AsyncStorage.setItem('currentClubId', club.id);
+        const { data: clubs } = await supabase
+          .from('clubs').select('id, club_name, sport, active_courts').eq('host_uid', session.user.id);
+        if (clubs && clubs.length === 1) {
+          await AsyncStorage.setItem('currentClubId', clubs[0].id);
           await AsyncStorage.setItem('isHost', 'true');
           router.replace('/dashboard');
+          return;
+        } else if (clubs && clubs.length > 1) {
+          setMyClubs(clubs as MyClub[]);
+          setShowClubPicker(true);
           return;
         }
       }
@@ -173,27 +189,32 @@ export default function WelcomeScreen() {
     const uid = session?.user?.id;
     if (!uid) { setAuthErrorMsg('Signed in but could not get session. Try again.'); return; }
 
-    const { data: existingClub, error: selectError } = await supabase
-      .from('clubs').select('id').eq('host_uid', uid).maybeSingle();
+    const { data: existingClubs, error: selectError } = await supabase
+      .from('clubs').select('id, club_name, sport, active_courts').eq('host_uid', uid);
     if (selectError) { setAuthErrorMsg('DB error: ' + selectError.message); return; }
 
-    let finalClubId: string;
-
-    if (existingClub) {
-      finalClubId = existingClub.id;
-    } else {
+    if (!existingClubs || existingClubs.length === 0) {
+      // New user — create first club
       const newClubId = 'CLUB-' +
         Math.random().toString(36).substring(2, 7).toUpperCase() +
         Math.random().toString(36).substring(2, 7).toUpperCase();
       const { error: dbError } = await supabase.from('clubs').insert([{ id: newClubId, host_uid: uid }]);
       if (dbError) { setAuthErrorMsg('DB error: ' + dbError.message + ' — have you run the SQL setup script in Supabase?'); return; }
-      finalClubId = newClubId;
+      await AsyncStorage.setItem('currentClubId', newClubId);
+      await AsyncStorage.setItem('isHost', 'true');
+      setShowAuthModal(false);
+      router.replace('/dashboard');
+    } else if (existingClubs.length === 1) {
+      await AsyncStorage.setItem('currentClubId', existingClubs[0].id);
+      await AsyncStorage.setItem('isHost', 'true');
+      setShowAuthModal(false);
+      router.replace('/dashboard');
+    } else {
+      // Multiple clubs — show picker
+      setMyClubs(existingClubs as MyClub[]);
+      setShowAuthModal(false);
+      setShowClubPicker(true);
     }
-
-    await AsyncStorage.setItem('currentClubId', finalClubId);
-    await AsyncStorage.setItem('isHost', 'true');
-    setShowAuthModal(false);
-    router.replace('/dashboard');
   };
 
   // ─── Google Sign In ───────────────────────────────────────────────────────
@@ -335,6 +356,35 @@ export default function WelcomeScreen() {
       setAuthErrorMsg(e.message || 'Could not send reset email. Try again.');
     } finally {
       setIsAuthLoading(false);
+    }
+  };
+
+  // ─── Multi-club helpers ───────────────────────────────────────────────────
+  const selectClub = async (clubId: string) => {
+    await AsyncStorage.setItem('currentClubId', clubId);
+    await AsyncStorage.setItem('isHost', 'true');
+    setShowClubPicker(false);
+    router.replace('/dashboard');
+  };
+
+  const createNewClub = async () => {
+    // TODO: PREMIUM — free tier should be limited to 1 club
+    setIsLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const uid = session?.user?.id;
+      if (!uid) { setIsLoading(false); return; }
+      const newClubId = 'CLUB-' +
+        Math.random().toString(36).substring(2, 7).toUpperCase() +
+        Math.random().toString(36).substring(2, 7).toUpperCase();
+      const { error } = await supabase.from('clubs').insert([{ id: newClubId, host_uid: uid }]);
+      if (error) { Alert.alert('Error', error.message); setIsLoading(false); return; }
+      await AsyncStorage.setItem('currentClubId', newClubId);
+      await AsyncStorage.setItem('isHost', 'true');
+      setShowClubPicker(false);
+      router.replace('/dashboard');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -889,6 +939,54 @@ export default function WelcomeScreen() {
           </View>
         </Modal>
       )}
+
+      {/* ── MY CLUBS PICKER MODAL ── */}
+      <Modal visible={showClubPicker} animationType="slide" transparent>
+        <View style={styles.authOverlay}>
+          <View style={[styles.authSheet, { paddingBottom: 30 }]}>
+            <Text style={styles.authTitle}>MY CLUBS</Text>
+            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 16, fontSize: 13 }}>
+              Choose a club to manage or create a new one.
+            </Text>
+            <ScrollView style={{ maxHeight: 320 }} showsVerticalScrollIndicator={false}>
+              {myClubs.map((c) => {
+                const sc = getSportConfig(c.sport);
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={{
+                      backgroundColor: colors.surface, borderRadius: 8, borderWidth: 1,
+                      borderColor: colors.border, padding: 14, marginBottom: 10,
+                      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+                    }}
+                    onPress={() => selectClub(c.id)}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 15 }}>
+                        {sc.emoji}  {c.club_name || `My ${sc.label} Club`}
+                      </Text>
+                      <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 3 }}>
+                        ID: {c.id}  •  {c.active_courts || 4} {sc.court.toLowerCase()}s
+                      </Text>
+                    </View>
+                    <Text style={{ color: colors.primary, fontSize: 20 }}>▶</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.hostButton, { marginTop: 12, opacity: isLoading ? 0.5 : 1 }]}
+              onPress={createNewClub}
+              disabled={isLoading}
+            >
+              {isLoading
+                ? <ActivityIndicator color={colors.black} />
+                : <Text style={styles.btnText}>+ CREATE NEW CLUB</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── PASSWORD RECOVERY MODAL ── */}
       <Modal visible={showRecoveryModal} animationType="slide" transparent>
