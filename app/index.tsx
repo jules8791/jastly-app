@@ -98,6 +98,23 @@ export default function WelcomeScreen() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // On web, Expo Router may intercept the URL hash before Supabase can read it.
+  // Manually detect recovery tokens in the hash and set the session.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    if (!hash.includes('type=recovery')) return;
+    const params = new URLSearchParams(hash.slice(1));
+    const accessToken = params.get('access_token');
+    const refreshToken = params.get('refresh_token');
+    if (accessToken && refreshToken) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .then(({ error }) => {
+          if (!error) setShowRecoveryModal(true);
+        });
+    }
+  }, []);
+
   const handleSetNewPassword = async () => {
     setRecoveryMsg('');
     if (recoveryPassword.length < 8) { setRecoveryMsg('Password must be at least 8 characters.'); return; }
