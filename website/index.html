@@ -64,6 +64,11 @@
   </script>
 
   <meta name="google-site-verification" content="0LzNi4p9vbf0CIMzexKB1l3NtiHOUfQNo7pLPH4OdyI" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#FFEB3B" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Queue Master" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏆</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -130,8 +135,15 @@
       justify-content: space-between;
       padding: 16px 40px;
       background: rgba(0, 0, 0, 0.85);
+      transition: background 0.3s, padding 0.3s, box-shadow 0.3s;
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
+    }
+
+    nav.scrolled {
+      background: rgba(0, 0, 0, 0.97);
+      padding: 10px 40px;
+      box-shadow: 0 2px 20px rgba(0, 0, 0, 0.6);
     }
 
     .nav-logo {
@@ -807,6 +819,117 @@
       margin-top: 8px;
     }
 
+    /* ── SCREENSHOTS ──────────────────────────────────────── */
+    .screenshots {
+      padding: 80px 0;
+      background: var(--bg);
+    }
+
+    .screenshots-row {
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 32px;
+      margin-top: 52px;
+      flex-wrap: wrap;
+    }
+
+    .phone-mockup {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 18px;
+      transition: transform 0.3s;
+    }
+
+    .phone-mockup:hover { transform: translateY(-6px); }
+    .phone-featured { margin-bottom: 0; }
+    .phone-featured .phone-frame { transform: scale(1.12); }
+
+    .phone-frame {
+      width: 170px;
+      height: 350px;
+      background: #0e0e0e;
+      border-radius: 30px;
+      padding: 14px 8px 10px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.6), inset 0 0 0 1.5px rgba(255,255,255,0.09);
+      position: relative;
+    }
+
+    .phone-frame::before {
+      content: '';
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 44px;
+      height: 4px;
+      background: rgba(255,255,255,0.12);
+      border-radius: 2px;
+    }
+
+    .phone-screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      padding: 20px 12px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      overflow: hidden;
+    }
+
+    .screen-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #FFEB3B;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+
+    .screen-line {
+      height: 7px;
+      background: rgba(255,255,255,0.14);
+      border-radius: 4px;
+      width: 100%;
+    }
+
+    .screen-line.short { width: 60%; }
+    .screen-line.mid   { width: 78%; }
+
+    .screen-court {
+      height: 44px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .screen-stat-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .stat-medal {
+      font-size: 13px;
+      width: 22px;
+      flex-shrink: 0;
+    }
+
+    .stat-bar {
+      height: 9px;
+      background: linear-gradient(90deg, #FFEB3B 0%, rgba(255,235,59,0.25) 100%);
+      border-radius: 5px;
+    }
+
+    .phone-caption {
+      color: var(--gray2);
+      font-size: 13px;
+      text-align: center;
+      max-width: 150px;
+      line-height: 1.5;
+    }
+
     /* ── FOOTER ───────────────────────────────────────────── */
     footer {
       background: #000;
@@ -1222,6 +1345,62 @@
     </div>
   </section>
 
+  <!-- SCREENSHOTS -->
+  <section class="screenshots" id="screenshots">
+    <div class="section-inner">
+      <div class="fade-in" style="text-align:center; margin-bottom:0;">
+        <div class="section-label">See it in action</div>
+        <h2 class="section-title">Everything you need, <span>right there.</span></h2>
+        <p class="section-subtitle" style="max-width:540px; margin:12px auto 0;">From managing the queue to tracking player stats — all in one clean, fast interface.</p>
+      </div>
+      <div class="screenshots-row">
+        <!-- Queue screen -->
+        <div class="phone-mockup fade-in">
+          <div class="phone-frame">
+            <div class="phone-screen" style="background:linear-gradient(160deg,#111 0%,#1a1a2e 100%);">
+              <div class="screen-label">📋 QUEUE</div>
+              <div class="screen-line"></div>
+              <div class="screen-line short"></div>
+              <div class="screen-line"></div>
+              <div class="screen-line mid"></div>
+              <div class="screen-line short"></div>
+              <div class="screen-line"></div>
+              <div class="screen-line mid"></div>
+              <div class="screen-line short"></div>
+            </div>
+          </div>
+          <p class="phone-caption">Live queue with real-time updates</p>
+        </div>
+        <!-- Courts screen (featured) -->
+        <div class="phone-mockup phone-featured fade-in">
+          <div class="phone-frame">
+            <div class="phone-screen" style="background:linear-gradient(160deg,#0a1628 0%,#0d3524 100%);">
+              <div class="screen-label">🏟️ COURTS</div>
+              <div class="screen-court"></div>
+              <div class="screen-court"></div>
+              <div class="screen-court"></div>
+            </div>
+          </div>
+          <p class="phone-caption">Courts dashboard with live timers</p>
+        </div>
+        <!-- Stats screen -->
+        <div class="phone-mockup fade-in">
+          <div class="phone-frame">
+            <div class="phone-screen" style="background:linear-gradient(160deg,#1a0a2e 0%,#2d1b69 100%);">
+              <div class="screen-label">🏆 STATS</div>
+              <div class="screen-stat-row"><div class="stat-medal">🥇</div><div class="stat-bar" style="width:88%"></div></div>
+              <div class="screen-stat-row"><div class="stat-medal">🥈</div><div class="stat-bar" style="width:74%"></div></div>
+              <div class="screen-stat-row"><div class="stat-medal">🥉</div><div class="stat-bar" style="width:60%"></div></div>
+              <div class="screen-stat-row"><div class="stat-medal">#4</div><div class="stat-bar" style="width:44%"></div></div>
+              <div class="screen-stat-row"><div class="stat-medal">#5</div><div class="stat-bar" style="width:30%"></div></div>
+            </div>
+          </div>
+          <p class="phone-caption">Player stats and leaderboard</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- DOWNLOAD -->
   <section class="download" id="download">
     <div class="section-inner">
@@ -1343,6 +1522,12 @@
         alert('Queue Master is coming soon to the ' + (id === 'app-store-btn' ? 'App Store' : 'Google Play') + '!');
       });
     });
+
+    // Sticky nav scroll effect
+    const nav = document.querySelector('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 40);
+    }, { passive: true });
   </script>
 </body>
 </html>

@@ -1,0 +1,20 @@
+{
+  "name": "Queue Master by Jastly",
+  "short_name": "Queue Master",
+  "description": "Smart queue management for sports clubs. Manage courts, queues and player rotations in real time.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#FFEB3B",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["sports", "utilities"],
+  "lang": "en-GB"
+}
