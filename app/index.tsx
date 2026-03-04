@@ -126,7 +126,11 @@ export default function WelcomeScreen() {
     if (accessToken && refreshToken) {
       supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
         .then(({ error }) => {
-          if (!error) setShowRecoveryModal(true);
+          if (!error) {
+            // Clear tokens from URL to prevent exposure via browser history/logs
+            window.history.replaceState({}, document.title, window.location.pathname);
+            setShowRecoveryModal(true);
+          }
         });
     }
   }, []);
@@ -472,15 +476,16 @@ export default function WelcomeScreen() {
     let extracted = data;
     try {
       const url = new URL(data);
-      const params = new URLSearchParams(url.search);
-      const fromParam = params.get('clubId');
+      const fromParam = url.searchParams.get('clubId');
       if (fromParam) extracted = fromParam;
     } catch {}
 
     const clean = extracted.trim().toUpperCase();
-    if (clean) {
+    if (/^CLUB-[A-Z0-9]{5,10}$/.test(clean)) {
       setClubId(clean);
       Alert.alert('QR Scanned ✓', `Club ID filled in: ${clean}\n\nEnter your name and tap JOIN.`);
+    } else {
+      Alert.alert('Invalid QR', 'This QR code does not contain a valid Club ID.');
     }
   };
 
@@ -562,9 +567,13 @@ export default function WelcomeScreen() {
             matches = diff === 0;
           }
         } else {
-          // Legacy format
+          // Legacy format — constant-time compare to prevent timing attacks
           const legacy = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `jastly::${password.trim()}::club`);
-          matches = legacy === stored;
+          if (legacy.length === stored.length) {
+            let diff = 0;
+            for (let i = 0; i < legacy.length; i++) diff |= legacy.charCodeAt(i) ^ stored.charCodeAt(i);
+            matches = diff === 0;
+          }
         }
         if (!matches) {
           Alert.alert('Access Denied', 'Incorrect password. Ask the host for the session password.');

@@ -30,6 +30,12 @@ import {
   SetupPinModal, EnterPinModal, SportSetupModal, SessionStartupModal, BatchAddModal,
   GuidedSetupWizard,
 } from '../../components/dashboard/ActionModals';
+import { TournamentPanel } from '../../components/dashboard/TournamentPanel';
+import {
+  TournamentSetupModal, TournamentResultModal,
+  TournamentStandingsModal, TeamDetailModal,
+} from '../../components/dashboard/TournamentModals';
+import { TournamentMatch, TournamentTeam } from '../../types';
 import { useClubSession } from '../../hooks/useClubSession';
 import { DashboardHeader } from '../../components/dashboard/DashboardHeader';
 import { GuestStatusBanner } from '../../components/dashboard/GuestStatusBanner';
@@ -109,6 +115,11 @@ export default function Dashboard() {
   const [showSessionSummary, setShowSessionSummary] = useState(false);
   const [showBatchAdd, setShowBatchAdd] = useState(false);
   const [showSetupGuide, setShowSetupGuide] = useState(false);
+  const [showTournamentSetup, setShowTournamentSetup] = useState(false);
+  const [showTournamentResult, setShowTournamentResult] = useState(false);
+  const [showTournamentStandings, setShowTournamentStandings] = useState(false);
+  const [activeTournamentMatch, setActiveTournamentMatch] = useState<TournamentMatch | null>(null);
+  const [selectedTeamDetail, setSelectedTeamDetail] = useState<TournamentTeam | null>(null);
   const [showSubstitute, setShowSubstitute] = useState(false);
   const [substituteCourtIdx, setSubstituteCourtIdx] = useState('');
   const [substituteOutPlayer, setSubstituteOutPlayer] = useState('');
@@ -481,41 +492,81 @@ export default function Dashboard() {
               courtLabel={courtLabel} sportEmoji={sportEmoji}
               isHost={isHost} isPowerGuest={isPowerGuest} isProcessingAction={isProcessingAction}
               courtStartTimes={courtStartTimes}
-              onFinishMatch={(courtIdx, players) => setShowResult({ courtIdx, players })}
+              onFinishMatch={(courtIdx, players) => {
+                // Check if this court has an active tournament match
+                const tMatch = club.tournament?.matches.find(
+                  m => String(m.courtIdx) === String(courtIdx) && m.winnerId === null,
+                );
+                if (tMatch && club.tournament) {
+                  setActiveTournamentMatch(tMatch);
+                  setShowTournamentResult(true);
+                } else {
+                  setShowResult({ courtIdx, players });
+                }
+              }}
               onSubstitute={openSubstitute}
             />
           </View>
           <View style={isWideWeb ? { flex: 2 } : {}}>
-            <QueuePanel
-              club={club} isHost={isHost} isPowerGuest={isPowerGuest} myName={myName}
-              selectedQueueIdx={selectedQueueIdx} playersPerGame={playersPerGame}
-              sportEmoji={sportEmoji} courtLabel={courtLabel}
-              genderBalanced={genderBalanced} avoidRepeats={avoidRepeats}
-              isProcessingAction={isProcessingAction}
-              onSelectQueueIdx={setSelectedQueueIdx}
-              onAutoPick={() => { const i = handleAutoPick(); if (i) { setSelectedQueueIdx(i); setShowCourts(true); } }}
-              onOpenPlayers={() => setShowPlayers(true)}
-              onTogglePause={(name) => {
-                if (isHost || isPowerGuest) processRequest({ action: 'toggle_pause', payload: { name }, _fromHost: isHost, _isPowerGuest: isPowerGuest });
-                else if (name === myName) sendReq('toggle_pause');
-              }}
-              onLeave={(name) => {
-                if (isHost) processRequest({ action: 'leave', payload: { name }, _fromHost: true });
-                else if (isPowerGuest) sendReq('leave', { name });
-                else sendReq('leave');
-              }}
-              onGrantPowerGuest={grantPowerGuest}
-              onUndo={isHost ? undoLastAction : undefined}
-              onMoveUp={(i) => {
-                if (isHost) processRequest({ action: 'reorder_queue', payload: { fromIdx: i, toIdx: i - 1 }, _fromHost: true });
-                else sendReq('reorder_queue', { fromIdx: i, toIdx: i - 1 });
-              }}
-              onMoveDown={(i) => {
-                if (isHost) processRequest({ action: 'reorder_queue', payload: { fromIdx: i, toIdx: i + 1 }, _fromHost: true });
-                else sendReq('reorder_queue', { fromIdx: i, toIdx: i + 1 });
-              }}
-              onBatchAdd={isHost || isPowerGuest ? () => setShowBatchAdd(true) : undefined}
-            />
+            {club.tournament ? (
+              <TournamentPanel
+                tournament={club.tournament}
+                isHost={isHost}
+                courtLabel={courtLabel}
+                onStartMatch={(match) => {
+                  // Find a free court
+                  const busyCourts = new Set(Object.keys(club.court_occupants || {}).map(Number));
+                  let courtIdx = 0;
+                  while (busyCourts.has(courtIdx) && courtIdx < (club.active_courts || 4)) courtIdx++;
+                  const team1 = club.tournament!.teams.find(t => t.id === match.team1Id);
+                  const team2 = club.tournament!.teams.find(t => t.id === match.team2Id);
+                  const allPlayers = [
+                    ...(team1?.players.map(name => ({ name, gender: (club.waiting_list?.find((p: any) => p.name === name)?.gender ?? 'M') as 'M' | 'F' })) ?? []),
+                    ...(team2?.players.map(name => ({ name, gender: (club.waiting_list?.find((p: any) => p.name === name)?.gender ?? 'M') as 'M' | 'F' })) ?? []),
+                  ];
+                  processRequest({ action: 'start_tournament_match', payload: { matchId: match.id, courtIdx, players: allPlayers }, _fromHost: true });
+                }}
+                onViewStandings={() => setShowTournamentStandings(true)}
+                onEndTournament={() => {
+                  Alert.alert('End Tournament', 'Are you sure you want to end the tournament?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'End', style: 'destructive', onPress: () => processRequest({ action: 'tournament_end', payload: {}, _fromHost: true }) },
+                  ]);
+                }}
+                onTeamPress={(team) => setSelectedTeamDetail(team)}
+              />
+            ) : (
+              <QueuePanel
+                club={club} isHost={isHost} isPowerGuest={isPowerGuest} myName={myName}
+                selectedQueueIdx={selectedQueueIdx} playersPerGame={playersPerGame}
+                sportEmoji={sportEmoji} courtLabel={courtLabel}
+                genderBalanced={genderBalanced} avoidRepeats={avoidRepeats}
+                isProcessingAction={isProcessingAction}
+                onSelectQueueIdx={setSelectedQueueIdx}
+                onAutoPick={() => { const i = handleAutoPick(); if (i) { setSelectedQueueIdx(i); setShowCourts(true); } }}
+                onOpenPlayers={() => setShowPlayers(true)}
+                onTogglePause={(name) => {
+                  if (isHost || isPowerGuest) processRequest({ action: 'toggle_pause', payload: { name }, _fromHost: isHost, _isPowerGuest: isPowerGuest });
+                  else if (name === myName) sendReq('toggle_pause');
+                }}
+                onLeave={(name) => {
+                  if (isHost) processRequest({ action: 'leave', payload: { name }, _fromHost: true });
+                  else if (isPowerGuest) sendReq('leave', { name });
+                  else sendReq('leave');
+                }}
+                onGrantPowerGuest={grantPowerGuest}
+                onUndo={isHost ? undoLastAction : undefined}
+                onMoveUp={(i) => {
+                  if (isHost) processRequest({ action: 'reorder_queue', payload: { fromIdx: i, toIdx: i - 1 }, _fromHost: true });
+                  else sendReq('reorder_queue', { fromIdx: i, toIdx: i - 1 });
+                }}
+                onMoveDown={(i) => {
+                  if (isHost) processRequest({ action: 'reorder_queue', payload: { fromIdx: i, toIdx: i + 1 }, _fromHost: true });
+                  else sendReq('reorder_queue', { fromIdx: i, toIdx: i + 1 });
+                }}
+                onBatchAdd={isHost || isPowerGuest ? () => setShowBatchAdd(true) : undefined}
+              />
+            )}
           </View>
         </View>
       </ScrollView>
@@ -558,6 +609,8 @@ export default function Dashboard() {
         onToggleTheme={toggleTheme} onSignOut={signOut} onMyClubs={goMyClubs}
         onPinToggle={handlePinToggle} onPowerGuestToggle={handlePowerGuestToggle}
         onShowSetupGuide={() => { setShowSettings(false); setShowSetupGuide(true); }}
+        onShowTournament={() => { setShowSettings(false); setShowTournamentSetup(true); }}
+        tournamentActive={!!club?.tournament}
       />
 
       <HelpModal visible={showHelp} sportEmoji={sportEmoji} courtLabel={courtLabel} onClose={() => setShowHelp(false)} />
@@ -629,6 +682,62 @@ export default function Dashboard() {
           await supabase.from('clubs').update({ sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }).eq('id', cidRef.current);
         }}
       />
+
+      {/* ── TOURNAMENT MODALS ── */}
+      <TournamentSetupModal
+        visible={showTournamentSetup}
+        waitingList={club?.waiting_list || []}
+        defaultTeamSize={Math.max(2, Math.floor(playersPerGame / 2))}
+        onClose={() => setShowTournamentSetup(false)}
+        onStart={(tournament) => {
+          setShowTournamentSetup(false);
+          processRequest({ action: 'tournament_start', payload: { tournament }, _fromHost: true });
+        }}
+      />
+
+      <TournamentResultModal
+        visible={showTournamentResult}
+        match={activeTournamentMatch}
+        teams={club?.tournament?.teams || []}
+        format={club?.tournament?.format ?? 'round_robin'}
+        waitingList={club?.waiting_list || []}
+        onConfirmStandard={(winnerId, scoreA, scoreB) => {
+          if (!activeTournamentMatch) return;
+          processRequest({ action: 'tournament_match_result', payload: { matchId: activeTournamentMatch.id, winnerId, scoreA, scoreB }, _fromHost: true });
+          setShowTournamentResult(false);
+          setActiveTournamentMatch(null);
+        }}
+        onConfirmSuperGame1={(scores) => {
+          if (!activeTournamentMatch) return;
+          processRequest({ action: 'tournament_super_game1', payload: { matchId: activeTournamentMatch.id, game1Scores: scores }, _fromHost: true });
+          setShowTournamentResult(false);
+          setActiveTournamentMatch(null);
+        }}
+        onConfirmSuperGame2={(scores) => {
+          if (!activeTournamentMatch) return;
+          processRequest({ action: 'tournament_match_result', payload: { matchId: activeTournamentMatch.id, game2Scores: scores }, _fromHost: true });
+          setShowTournamentResult(false);
+          setActiveTournamentMatch(null);
+        }}
+        onCancel={() => { setShowTournamentResult(false); setActiveTournamentMatch(null); }}
+      />
+
+      {club?.tournament && (
+        <TournamentStandingsModal
+          visible={showTournamentStandings}
+          tournament={club.tournament}
+          onClose={() => setShowTournamentStandings(false)}
+        />
+      )}
+
+      {club?.tournament && (
+        <TeamDetailModal
+          visible={!!selectedTeamDetail}
+          team={selectedTeamDetail}
+          tournament={club.tournament}
+          onClose={() => setSelectedTeamDetail(null)}
+        />
+      )}
 
       <SetupPinModal visible={showSetupPin} setupPin1={setupPin1} setupPin2={setupPin2} pinError={pinError}
         onChangePin1={(v) => { setSetupPin1(v); setPinError(false); }}
