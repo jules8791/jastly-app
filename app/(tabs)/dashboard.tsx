@@ -514,6 +514,7 @@ export default function Dashboard() {
                 isHost={isHost}
                 courtLabel={courtLabel}
                 courtOccupants={club.court_occupants || {}}
+                myName={myName}
                 onStartMatch={(match) => {
                   // Find a free court
                   const busyCourts = new Set(Object.keys(club.court_occupants || {}).map(Number));
@@ -521,10 +522,16 @@ export default function Dashboard() {
                   while (busyCourts.has(courtIdx) && courtIdx < (club.active_courts || 4)) courtIdx++;
                   const team1 = club.tournament!.teams.find(t => t.id === match.team1Id);
                   const team2 = club.tournament!.teams.find(t => t.id === match.team2Id);
-                  const allPlayers = [
-                    ...(team1?.players.map(name => ({ name, gender: (club.waiting_list?.find((p: any) => p.name === name)?.gender ?? 'M') as 'M' | 'F' })) ?? []),
-                    ...(team2?.players.map(name => ({ name, gender: (club.waiting_list?.find((p: any) => p.name === name)?.gender ?? 'M') as 'M' | 'F' })) ?? []),
-                  ];
+                  // Use game2 player lists if we're in game 2
+                  const t1Names = match.game1Complete ? (match.game2Team1 ?? team1?.players ?? []) : (team1?.players ?? []);
+                  const t2Names = match.game1Complete ? (match.game2Team2 ?? team2?.players ?? []) : (team2?.players ?? []);
+                  // Look up gender from originalQueue (players removed from waiting_list during tournament)
+                  const rosterLookup = [...(club.tournament!.originalQueue ?? []), ...(club.waiting_list ?? [])];
+                  const toPlayer = (name: string) => ({
+                    name,
+                    gender: (rosterLookup.find((p: any) => p.name === name)?.gender ?? 'M') as 'M' | 'F',
+                  });
+                  const allPlayers = [...t1Names.map(toPlayer), ...t2Names.map(toPlayer)];
                   processRequest({ action: 'start_tournament_match', payload: { matchId: match.id, courtIdx, players: allPlayers }, _fromHost: true });
                 }}
                 onViewStandings={() => setShowTournamentStandings(true)}
@@ -535,6 +542,7 @@ export default function Dashboard() {
                   ]);
                 }}
                 onTeamPress={(team) => setSelectedTeamDetail(team)}
+                onSubmitScore={(matchId, score) => sendReq('tournament_super_score', { matchId, score })}
               />
             ) : (
               <QueuePanel
