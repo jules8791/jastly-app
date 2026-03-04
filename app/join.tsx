@@ -5,7 +5,6 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Crypto from 'expo-crypto';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -29,12 +28,12 @@ export default function JoinScreen() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!clubId) { router.replace('/'); return; }
+    if (!clubId || !/^CLUB-[A-Z0-9]{5,10}$/.test(clubId)) { router.replace('/'); return; }
     AsyncStorage.getItem('guestName').then(saved => { if (saved) setName(saved); });
     // Check if club exists and requires password — server-side only, hash never sent to client
     Promise.all([
       supabase.from('clubs').select('id, club_name').eq('id', clubId).maybeSingle(),
-      supabase.rpc('validate_join_password', { p_club_id: clubId, p_password_hash: '' }),
+      supabase.rpc('validate_join_password', { p_club_id: clubId, p_password: '' }),
     ]).then(([{ data }, { data: rpc }]) => {
       if (!data) { Alert.alert('Club Not Found', 'No club found with that ID.'); router.replace('/'); return; }
       setClubName(data.club_name || clubId);
@@ -43,9 +42,6 @@ export default function JoinScreen() {
     });
   }, [clubId]);
 
-  const hashPassword = (pw: string): Promise<string> =>
-    Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `jastly::${pw}::club`);
-
   const handleJoin = async () => {
     const cleanName = name.trim()
       .replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
@@ -53,11 +49,10 @@ export default function JoinScreen() {
 
     setIsLoading(true);
     try {
-      // Validate password server-side — hash never exposed to client
+      // Validate password server-side — plaintext sent over TLS, compared inside SECURITY DEFINER RPC
       if (needsPassword) {
         if (!password.trim()) { Alert.alert('Password Required', 'This club requires a password.'); setIsLoading(false); return; }
-        const hash = await hashPassword(password.trim());
-        const { data: rpc } = await supabase.rpc('validate_join_password', { p_club_id: clubId, p_password_hash: hash });
+        const { data: rpc } = await supabase.rpc('validate_join_password', { p_club_id: clubId, p_password: password.trim() });
         if (!(rpc as any)?.valid) { Alert.alert('Wrong Password', 'Incorrect password.'); setIsLoading(false); return; }
       }
 

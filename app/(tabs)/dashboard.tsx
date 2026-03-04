@@ -250,6 +250,8 @@ export default function Dashboard() {
       clubPassword: '',
       soundEnabled,
       powerGuestEnabled: !!(club.has_power_guest_pin ?? club.power_guest_pin),
+      rotationMode: (club.rotation_mode ?? 'standard') as 'standard' | 'winner_stays' | 'loser_stays',
+      targetGameDuration: club.target_game_duration ?? 0,
     });
     setShowSettings(true);
   };
@@ -261,13 +263,17 @@ export default function Dashboard() {
       const hashedPw = tempSettings.clubPassword.trim() ? await makeHash(tempSettings.clubPassword.trim()) : null;
       setClub((prev: any) => ({ ...prev, club_name: tempSettings.clubName, active_courts: tempSettings.courts,
         pick_limit: tempSettings.limit, gender_balanced: tempSettings.genderBalanced,
-        avoid_repeats: tempSettings.avoidRepeats, join_password: hashedPw, sport: tempSettings.sport }));
+        avoid_repeats: tempSettings.avoidRepeats, join_password: hashedPw, sport: tempSettings.sport,
+        rotation_mode: tempSettings.rotationMode, target_game_duration: tempSettings.targetGameDuration || null }));
       const { data: sd } = await supabase.auth.getSession();
       const uid = sd?.session?.user?.id;
       await supabase.from('clubs').update({
         club_name: tempSettings.clubName, active_courts: tempSettings.courts, pick_limit: tempSettings.limit,
         gender_balanced: tempSettings.genderBalanced, avoid_repeats: tempSettings.avoidRepeats,
-        join_password: hashedPw, sport: tempSettings.sport, ...(uid ? { host_uid: uid } : {}),
+        join_password: hashedPw, sport: tempSettings.sport,
+        rotation_mode: tempSettings.rotationMode,
+        target_game_duration: tempSettings.targetGameDuration || null,
+        ...(uid ? { host_uid: uid } : {}),
       }).eq('id', cidRef.current);
       setTtsVoice(tempSettings.ttsVoice); setRepeatEnabled(tempSettings.repeat);
       setRepeatInterval(tempSettings.repeatInterval); setCountdownEnabled(tempSettings.countdown);
@@ -574,6 +580,9 @@ export default function Dashboard() {
                   else sendReq('reorder_queue', { fromIdx: i, toIdx: i + 1 });
                 }}
                 onBatchAdd={isHost || isPowerGuest ? () => setShowBatchAdd(true) : undefined}
+                onSetPlayerNote={isHost ? (name, note) => {
+                  processRequest({ action: 'set_player_note', payload: { name, note }, _fromHost: true });
+                } : undefined}
               />
             )}
           </View>

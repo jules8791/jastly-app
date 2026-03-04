@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Platform, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
 import { QueuePlayer } from '../../types';
 import { makeStyles } from './dashboardStyles';
@@ -12,8 +12,16 @@ interface CourtsGridProps {
   isHost: boolean;
   isPowerGuest: boolean;
   isProcessingAction: boolean;
+  courtStartTimes: React.MutableRefObject<Record<string, number>>;
   onFinishMatch: (courtIdx: string, players: QueuePlayer[]) => void;
   onSubstitute: (courtIdx: string, outPlayer: string) => void;
+}
+
+function formatElapsed(startTime: number): string {
+  const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
 export function CourtsGrid({
@@ -21,6 +29,7 @@ export function CourtsGrid({
   courtOccupants,
   courtLabel,
   isHost,
+  courtStartTimes,
   onFinishMatch,
   onSubstitute,
 }: CourtsGridProps) {
@@ -28,6 +37,13 @@ export function CourtsGrid({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { width: screenWidth } = useWindowDimensions();
   const [courtGridWidth, setCourtGridWidth] = useState(0);
+  // Tick every second to drive elapsed time re-renders
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const numCourts = activeCourts || 4;
   const cardMargin = 4;
@@ -54,6 +70,7 @@ export function CourtsGrid({
           {row.map(i => {
             const players = courtOccupants?.[i.toString()];
             const isBusy = !!players;
+            const startTime = courtStartTimes.current[i.toString()];
             return (
               <TouchableOpacity
                 key={i}
@@ -80,6 +97,11 @@ export function CourtsGrid({
                     <Text numberOfLines={1} style={[styles.courtPlayer, { fontSize: nameFontSize }]}>
                       {players[2]?.name} & {players[3]?.name}
                     </Text>
+                    {startTime ? (
+                      <Text style={{ color: colors.gray3, fontSize: Math.max(8, titleFontSize - 1), marginTop: 2 }}>
+                        {'\u23F1'} {formatElapsed(startTime)}
+                      </Text>
+                    ) : null}
                     {isHost && (
                       <TouchableOpacity
                         onPress={() => onSubstitute(i.toString(), players[0]?.name)}

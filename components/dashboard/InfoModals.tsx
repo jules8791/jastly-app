@@ -75,29 +75,46 @@ export function LeaderboardModal({ visible, leaderboard, onClose }: LeaderboardM
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  const sorted = [...leaderboard].sort((a, b) => {
+    const rA = a.games > 0 ? a.wins / a.games : 0;
+    const rB = b.games > 0 ? b.wins / b.games : 0;
+    return rB !== rA ? rB - rA : (b.games || 0) - (a.games || 0);
+  });
+
   return (
     <Modal visible={visible} animationType="fade" transparent>
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>LEADERBOARD</Text>
-          <ScrollView style={{ maxHeight: 380 }}>
-            {leaderboard.map((p: Player, i: number) => {
-              const rate = (p.games || 0) > 0 ? Math.round((p.wins / p.games) * 100) : 0;
+          <Text style={styles.modalTitle}>PLAYER STATS</Text>
+          {/* Column headers */}
+          <View style={{ flexDirection: 'row', paddingHorizontal: 4, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <Text style={{ color: colors.gray3, fontSize: 10, width: 36 }}>RANK</Text>
+            <Text style={{ color: colors.gray3, fontSize: 10, flex: 1 }}>PLAYER</Text>
+            <Text style={{ color: colors.gray3, fontSize: 10, width: 30, textAlign: 'center' }}>G</Text>
+            <Text style={{ color: colors.gray3, fontSize: 10, width: 30, textAlign: 'center' }}>W</Text>
+            <Text style={{ color: colors.gray3, fontSize: 10, width: 44, textAlign: 'right' }}>WIN%</Text>
+          </View>
+          <ScrollView style={{ maxHeight: 360 }}>
+            {sorted.map((p: Player, i: number) => {
+              const rate = p.games > 0 ? Math.round((p.wins / p.games) * 100) : 0;
+              const rateColor = rate >= 60 ? colors.green : rate >= 40 ? colors.primary : colors.gray2;
               return (
-                <View key={i} style={[styles.modalItem, { alignItems: 'center' }]}>
-                  <Text style={{ color: i < 3 ? colors.primary : colors.gray2, fontWeight: 'bold', width: 28 }}>
+                <View key={p.name} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: colors.borderSoft }}>
+                  <Text style={{ color: i < 3 ? colors.primary : colors.gray3, fontWeight: 'bold', width: 36, fontSize: i < 3 ? 16 : 12 }}>
                     {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                   </Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={{ color: colors.white, fontWeight: 'bold' }}>{p.name}</Text>
-                    <Text style={{ color: colors.gray3, fontSize: 11 }}>{p.wins || 0}W  /  {p.games || 0}G</Text>
+                    <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>{p.name}</Text>
+                    <Text style={{ color: p.gender === 'F' ? colors.pink : colors.blue, fontSize: 10 }}>{p.gender === 'F' ? 'Female' : 'Male'}</Text>
                   </View>
-                  <Text style={{ color: colors.green, fontWeight: 'bold' }}>{rate}%</Text>
+                  <Text style={{ color: colors.gray2, width: 30, textAlign: 'center', fontSize: 13 }}>{p.games || 0}</Text>
+                  <Text style={{ color: colors.green, width: 30, textAlign: 'center', fontSize: 13, fontWeight: 'bold' }}>{p.wins || 0}</Text>
+                  <Text style={{ color: rateColor, width: 44, textAlign: 'right', fontSize: 13, fontWeight: 'bold' }}>{rate}%</Text>
                 </View>
               );
             })}
-            {leaderboard.length === 0 && (
-              <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 20 }}>No stats yet.</Text>
+            {sorted.length === 0 && (
+              <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 20, marginBottom: 10 }}>No stats yet. Play some matches first!</Text>
             )}
           </ScrollView>
           <TouchableOpacity style={{ marginTop: 20 }} onPress={onClose}>
@@ -116,6 +133,8 @@ export interface MatchHistoryEntry {
   team1: string[];
   team2: string[];
   winners: string[];
+  scoreA?: number;
+  scoreB?: number;
 }
 
 export interface MatchHistoryModalProps {
@@ -158,6 +177,11 @@ export function MatchHistoryModal({ visible, matchHistory, courtLabel, onClose }
                         {m.team2?.join(' & ')}
                       </Text>
                     </Text>
+                    {m.scoreA !== undefined && (
+                      <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 13, marginTop: 4 }}>
+                        {m.scoreA} – {m.scoreB}
+                      </Text>
+                    )}
                   </View>
                 );
               })
@@ -307,6 +331,23 @@ export function HelpModal({ visible, sportEmoji, courtLabel, onClose }: HelpModa
       ],
     },
     {
+      emoji: '🏆', title: 'Tournament Mode',
+      items: [
+        'Start a tournament from Settings → 🏆 START TOURNAMENT.',
+        'Choose a format: Round Robin (every team plays every other), Knockout (single elimination), or Super Tournament (2 mini-games per fixture with individual scoring).',
+        'Set team size, number of rounds (Round Robin / Super), and whether teams should be gender balanced.',
+        'Step 2 — Build Teams: all queue players appear in the Unassigned pool. Tap a player to select them, then tap a team card to assign them. Tap ✕ on a player to return them to the pool.',
+        '⚡ AUTOPICK assigns all unassigned players to teams automatically. + ADD PLAYER lets you add a late arrival by name. + ADD TEAM creates an additional team.',
+        'Once the tournament starts, the queue panel is replaced by the fixture list. Tap a team name to see their upcoming fixtures and past results.',
+        'Host taps START ▶ on a fixture to put the teams on court. When the match ends, a result screen appears instead of the normal result modal.',
+        'Round Robin / Knockout: tap the winning team (or DRAW). Optionally enter a score. The standings update automatically.',
+        'Knockout: the next round generates automatically once all matches in the current round are finished. The last team standing is declared champion.',
+        'Super Tournament: after each game, every player enters their own score. At 11 points in game 1 the teams swap — in a mixed fixture the two female players change sides; in a same-sex fixture the player with the alphabetically lowest name from each team swaps. Game 2 is then played with the new lineup.',
+        'Super Tournament leaderboard ranks individual players by total points across all games.',
+        'Tap 📊 STANDINGS at any time to see the current table. Tap END TOURNAMENT (host only) to cancel the tournament and return to the normal queue.',
+      ],
+    },
+    {
       emoji: '🗑️', title: 'Full Wipe',
       items: [
         'Full Wipe (in Settings) clears the queue, courts, and match history.',
@@ -340,6 +381,114 @@ export function HelpModal({ visible, sportEmoji, courtLabel, onClose }: HelpModa
               onPress={onClose}
             >
               <Text style={[styles.btnText, { textAlign: 'center' }]}>GOT IT</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+// ─── SessionSummaryModal ─────────────────────────────────────────────────────
+export interface SessionSummaryModalProps {
+  visible: boolean;
+  matchHistory: MatchHistoryEntry[];
+  roster: Player[];
+  sportEmoji: string;
+  clubName: string;
+  onClose: () => void;
+  onShare: () => void;
+}
+
+export function SessionSummaryModal({
+  visible, matchHistory, roster, sportEmoji, clubName, onClose, onShare,
+}: SessionSummaryModalProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const totalMatches = matchHistory.length;
+  const playersWhoPlayed = new Set<string>();
+  matchHistory.forEach(m => [...(m.team1 || []), ...(m.team2 || [])].forEach(n => playersWhoPlayed.add(n)));
+
+  const hasScores = matchHistory.some(m => m.scoreA !== undefined);
+  const totalPoints = hasScores
+    ? matchHistory.reduce((s, m) => s + (m.scoreA ?? 0) + (m.scoreB ?? 0), 0) : 0;
+
+  const top3 = [...roster]
+    .filter(p => p.games >= 2)
+    .sort((a, b) => {
+      const rA = a.games > 0 ? a.wins / a.games : 0;
+      const rB = b.games > 0 ? b.wins / b.games : 0;
+      return rB !== rA ? rB - rA : b.wins - a.wins;
+    })
+    .slice(0, 3);
+
+  const mvp = top3[0];
+
+  const statRow = (label: string, value: string | number, color?: string) => (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderSoft }}>
+      <Text style={{ color: colors.gray2, fontSize: 13 }}>{label}</Text>
+      <Text style={{ color: color || colors.white, fontWeight: 'bold', fontSize: 13 }}>{value}</Text>
+    </View>
+  );
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={[styles.modalContent, { maxHeight: '88%' }]}>
+          <Text style={styles.modalTitle}>{sportEmoji} SESSION SUMMARY</Text>
+          <Text style={{ color: colors.gray3, textAlign: 'center', fontSize: 12, marginTop: -10, marginBottom: 16 }}>
+            {clubName}  •  {new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
+          </Text>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Stats */}
+            <View style={{ backgroundColor: colors.border, borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              {statRow('Matches played', totalMatches, colors.primary)}
+              {statRow('Players who played', playersWhoPlayed.size)}
+              {hasScores && statRow('Total points scored', totalPoints)}
+            </View>
+
+            {/* MVP */}
+            {mvp && (
+              <View style={{ backgroundColor: colors.selectedBg, borderRadius: 8, padding: 14, marginBottom: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.primary }}>
+                <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 12, letterSpacing: 1, marginBottom: 6 }}>🏆 MVP</Text>
+                <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 20 }}>{mvp.name}</Text>
+                <Text style={{ color: colors.green, fontSize: 13, marginTop: 4 }}>
+                  {mvp.wins}W / {mvp.games}G  •  {Math.round((mvp.wins / mvp.games) * 100)}% win rate
+                </Text>
+              </View>
+            )}
+
+            {/* Top 3 */}
+            {top3.length > 0 && (
+              <>
+                <Text style={{ color: colors.gray3, fontSize: 11, letterSpacing: 1, marginBottom: 8 }}>TOP PERFORMERS</Text>
+                {top3.map((p, i) => {
+                  const rate = Math.round((p.wins / p.games) * 100);
+                  return (
+                    <View key={p.name} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.borderSoft }}>
+                      <Text style={{ width: 28, fontSize: i === 0 ? 18 : 14, color: colors.primary }}>
+                        {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'}
+                      </Text>
+                      <Text style={{ flex: 1, color: colors.white, fontWeight: 'bold' }}>{p.name}</Text>
+                      <Text style={{ color: colors.gray2, fontSize: 12 }}>{p.wins}W/{p.games}G</Text>
+                      <Text style={{ color: rate >= 60 ? colors.green : colors.primary, fontWeight: 'bold', width: 40, textAlign: 'right' }}>{rate}%</Text>
+                    </View>
+                  );
+                })}
+              </>
+            )}
+
+            {totalMatches === 0 && (
+              <Text style={{ color: colors.gray3, textAlign: 'center', marginVertical: 20 }}>No matches played this session.</Text>
+            )}
+
+            <TouchableOpacity style={[styles.btnPrimary, { marginTop: 20, padding: 13 }]} onPress={onShare}>
+              <Text style={[styles.btnText, { textAlign: 'center' }]}>📤  SHARE SESSION STATS</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={{ marginTop: 16, paddingBottom: 4 }} onPress={onClose}>
+              <Text style={{ color: colors.gray1, textAlign: 'center' }}>CLOSE</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

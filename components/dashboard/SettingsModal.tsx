@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Modal, ScrollView, Switch, Text, TextInput,
   TouchableOpacity, View,
@@ -25,6 +25,8 @@ export interface TempSettings {
   clubPassword: string;
   soundEnabled: boolean;
   powerGuestEnabled: boolean;
+  rotationMode: 'standard' | 'winner_stays' | 'loser_stays';
+  targetGameDuration: number; // minutes, 0 = disabled
 }
 
 export const DEFAULT_TEMP_SETTINGS: TempSettings = {
@@ -44,6 +46,8 @@ export const DEFAULT_TEMP_SETTINGS: TempSettings = {
   clubPassword: '',
   soundEnabled: true,
   powerGuestEnabled: false,
+  rotationMode: 'standard',
+  targetGameDuration: 0,
 };
 
 interface SettingsModalProps {
@@ -67,12 +71,16 @@ interface SettingsModalProps {
   onShowLogs: () => void;
   onShowLeaderboard: () => void;
   onShowMatchHistory: () => void;
+  onShowSessionSummary: () => void;
   onShowInviteQR: () => void;
   onToggleTheme: () => void;
   onSignOut: () => void;
   onMyClubs: () => void;
   onPinToggle: (val: boolean) => void;
   onPowerGuestToggle: (val: boolean) => Promise<void>;
+  onShowSetupGuide: () => void;
+  onShowTournament: () => void;
+  tournamentActive: boolean;
 }
 
 export function SettingsModal({
@@ -94,15 +102,20 @@ export function SettingsModal({
   onShowLogs,
   onShowLeaderboard,
   onShowMatchHistory,
+  onShowSessionSummary,
   onShowInviteQR,
   onToggleTheme,
   onSignOut,
   onMyClubs,
   onPinToggle,
   onPowerGuestToggle,
+  onShowSetupGuide,
+  onShowTournament,
+  tournamentActive,
 }: SettingsModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [sessionCost, setSessionCost] = useState('');
 
   const set = <K extends keyof TempSettings>(key: K, val: TempSettings[K]) =>
     setTempSettings(prev => ({ ...prev, [key]: val }));
@@ -113,6 +126,31 @@ export function SettingsModal({
         <ScrollView>
           <View style={[styles.modalContent, { marginVertical: 20 }]}>
             <Text style={styles.modalTitle}>CLUB SETTINGS</Text>
+
+            <TouchableOpacity
+              onPress={onShowSetupGuide}
+              style={[styles.btnPrimary, { backgroundColor: colors.greenDark, padding: 14, marginBottom: 10 }]}
+            >
+              <Text style={[styles.btnText, { textAlign: 'center', fontSize: 14 }]}>🚀  SETUP GUIDE</Text>
+              <Text style={{ color: colors.gray3, textAlign: 'center', fontSize: 11, marginTop: 3 }}>
+                Step-by-step walkthrough for new sessions
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={onShowTournament}
+              disabled={tournamentActive}
+              style={[styles.btnPrimary, { backgroundColor: tournamentActive ? colors.gray3 : colors.deepBlue, padding: 14, marginBottom: 20 }]}
+            >
+              <Text style={[styles.btnText, { textAlign: 'center', fontSize: 14 }]}>
+                {tournamentActive ? '🏆  TOURNAMENT IN PROGRESS' : '🏆  START TOURNAMENT'}
+              </Text>
+              {!tournamentActive && (
+                <Text style={{ color: colors.gray3, textAlign: 'center', fontSize: 11, marginTop: 3 }}>
+                  Round-robin, knockout, or super tournament
+                </Text>
+              )}
+            </TouchableOpacity>
 
             <Text style={styles.sectionHeader}>SPORT</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
@@ -182,6 +220,75 @@ export function SettingsModal({
               </View>
               <Switch value={tempSettings.avoidRepeats} onValueChange={v => set('avoidRepeats', v)} thumbColor={tempSettings.avoidRepeats ? colors.primary : colors.gray3} trackColor={{ true: colors.purple, false: colors.border }} />
             </View>
+
+            <Text style={styles.sectionHeader}>SESSION ROTATION</Text>
+            <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 8 }}>How players return to the queue after a match</Text>
+            {(
+              [
+                { key: 'standard', label: 'Standard', sub: 'All players go to the back of the queue' },
+                { key: 'winner_stays', label: 'Winner Stays', sub: 'Winners jump to the front — play again next' },
+                { key: 'loser_stays', label: 'Loser Stays', sub: 'Losers jump to the front — play again next' },
+              ] as const
+            ).map(opt => (
+              <TouchableOpacity
+                key={opt.key}
+                onPress={() => set('rotationMode', opt.key)}
+                style={[styles.settingsRow, { backgroundColor: tempSettings.rotationMode === opt.key ? colors.selectedBg : 'transparent', borderRadius: 8, paddingHorizontal: 10 }]}
+              >
+                <View style={{ flex: 1, marginRight: 10 }}>
+                  <Text style={{ color: colors.white, fontWeight: tempSettings.rotationMode === opt.key ? 'bold' : 'normal' }}>{opt.label}</Text>
+                  <Text style={{ color: colors.gray3, fontSize: 11 }}>{opt.sub}</Text>
+                </View>
+                <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: tempSettings.rotationMode === opt.key ? colors.primary : colors.border, backgroundColor: tempSettings.rotationMode === opt.key ? colors.primary : 'transparent' }} />
+              </TouchableOpacity>
+            ))}
+
+            <Text style={styles.sectionHeader}>GAME TIMER</Text>
+            <View style={styles.settingsRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ color: colors.white }}>Target Game Duration</Text>
+                <Text style={{ color: colors.gray3, fontSize: 11 }}>
+                  {tempSettings.targetGameDuration === 0
+                    ? 'Disabled — no alert'
+                    : `Alert when a game exceeds ${tempSettings.targetGameDuration} min`}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => set('targetGameDuration', Math.max(0, tempSettings.targetGameDuration - 5))} style={styles.mathBtn}><Text style={{ color: colors.white }}>-</Text></TouchableOpacity>
+                <Text style={{ color: colors.primary, marginHorizontal: 12, fontWeight: 'bold', minWidth: 34, textAlign: 'center' }}>
+                  {tempSettings.targetGameDuration === 0 ? 'OFF' : `${tempSettings.targetGameDuration}m`}
+                </Text>
+                <TouchableOpacity onPress={() => set('targetGameDuration', Math.min(60, tempSettings.targetGameDuration + 5))} style={styles.mathBtn}><Text style={{ color: colors.white }}>+</Text></TouchableOpacity>
+              </View>
+            </View>
+
+            <Text style={styles.sectionHeader}>SESSION COST SPLITTER</Text>
+            <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 8 }}>Calculates cost per player — not saved</Text>
+            <View style={[styles.settingsRow, { alignItems: 'center' }]}>
+              <Text style={{ color: colors.white, marginRight: 10 }}>Total Cost</Text>
+              <TextInput
+                style={[styles.input, { flex: 1, marginBottom: 0, textAlign: 'right' }]}
+                value={sessionCost}
+                onChangeText={setSessionCost}
+                keyboardType="numeric"
+                placeholder="e.g. 40"
+                placeholderTextColor={colors.gray3}
+              />
+            </View>
+            {(() => {
+              const cost = parseFloat(sessionCost);
+              const playerCount = (club.waiting_list?.length ?? 0) + Object.values(club.court_occupants ?? {}).reduce((s, arr) => s + arr.length, 0);
+              if (!isNaN(cost) && cost > 0 && playerCount > 0) {
+                const perPerson = (cost / playerCount).toFixed(2);
+                return (
+                  <View style={{ backgroundColor: colors.selectedBg, borderRadius: 8, padding: 10, marginBottom: 10, alignItems: 'center' }}>
+                    <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 18 }}>£{perPerson} per player</Text>
+                    <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 2 }}>{playerCount} players total</Text>
+                  </View>
+                );
+              }
+              return null;
+            })()}
 
             <Text style={styles.sectionHeader}>POWER GUEST</Text>
             <View style={styles.settingsRow}>
@@ -271,6 +378,9 @@ export function SettingsModal({
                 <Text style={[styles.btnText, { textAlign: 'center' }]}>EXPORT CSV</Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity onPress={onShowSessionSummary} style={[styles.btnPrimary, { marginBottom: 10, padding: 12, backgroundColor: colors.greenDark }]}>
+              <Text style={[styles.btnText, { textAlign: 'center' }]}>🏆  SESSION SUMMARY</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={onShareStats} style={[styles.btnPrimary, { marginBottom: 10, padding: 12, backgroundColor: colors.purple }]}>
               <Text style={[styles.btnText, { textAlign: 'center' }]}>🏸  SHARE SESSION STATS</Text>
             </TouchableOpacity>

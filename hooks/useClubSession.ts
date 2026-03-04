@@ -10,7 +10,11 @@ import { Audio } from 'expo-av';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Platform, Share } from 'react-native';
 import { supabase } from '../supabase';
-import { Club, CourtResult, Player, QueuePlayer } from '../types';
+import { Club, CourtResult, Player, QueuePlayer, Tournament, TournamentMatch } from '../types';
+import {
+  computeGame2Teams, generateKnockoutRound, isRoundComplete, isMixedTeam,
+  knockoutAdvancers, recalcStandings, recalcSuperScores,
+} from '../utils/tournament';
 import { getSportConfig } from '../constants/sports';
 
 export function useClubSession() {
@@ -63,6 +67,9 @@ export function useClubSession() {
   const hasShownStartupRef = useRef(false);
   const guestHeartbeatsRef = useRef<Record<string, number>>({});
   const lastInactiveCheckRef = useRef(0);
+  const courtStartTimes = useRef<Record<string, number>>({});
+  const courtDurationAlerted = useRef<Record<string, boolean>>({});
+  const prevClubRef = useRef<Club | null>(null);
 
   // ─── Keep refs in sync ───────────────────────────────────────────────────
   useEffect(() => { clubRef.current = club; }, [club]);
@@ -96,7 +103,7 @@ export function useClubSession() {
   };
 
   const sanitiseName = (n: string) =>
-    (n || '').replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
+    (n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
 
   const getRoster = (c: Club | null): Player[] => {
     if (!c) return [];
@@ -288,7 +295,15 @@ export function useClubSession() {
       });
       if (addedCount > 0) {
         logEntries.push(`QUEUE: ${addedCount} player(s) added.`);
-        return { next, logs: logEntries, speech: `${addedCount} player${addedCount > 1 ? 's' : ''} added to the queue.` };
+        const addedNames = playersToAdd
+          .map((p: any) => sanitiseName(p.name))
+          .filter((n: string) => !!n);
+        const namePart = addedNames.length === 1
+          ? addedNames[0]
+          : addedNames.length === 2
+            ? `${addedNames[0]} and ${addedNames[1]}`
+            : `${addedNames.slice(0, -1).join(', ')} and ${addedNames[addedNames.length - 1]}`;
+        return { next, logs: logEntries, speech: `${namePart} ${addedNames.length === 1 ? 'has' : 'have'} joined the queue.` };
       }
     } else if (action === 'toggle_pause') {
       const targetName = sanitiseName(payload.name);
@@ -311,6 +326,16 @@ export function useClubSession() {
       next.waiting_list = next.waiting_list.filter((x: any) => x.name !== targetName);
       logEntries.push(`QUEUE: ${targetName} left.`);
       return { next, logs: logEntries, resetTimers: true };
+    } else if (action === 'set_player_note') {
+      if (!elevated) return null;
+      const targetName = sanitiseName(payload.name);
+      const note = (payload.note ?? '').toString().substring(0, 100);
+      const idx = next.waiting_list.findIndex((x: any) => x.name === targetName);
+      if (idx !== -1) {
+        next.waiting_list[idx] = { ...next.waiting_list[idx], notes: note || undefined };
+        logEntries.push(`NOTE: ${targetName} — "${note}"`);
+      }
+      return { next, logs: logEntries };
     } else if (action === 'substitute') {
       if (!elevated) return null;
       const { courtIdx, outPlayer, inPlayer } = payload;
@@ -367,8 +392,17 @@ export function useClubSession() {
       const nextActive = next.waiting_list.find((w: any) => !w.isResting);
       if (nextActive) msg += ` Next up is ${nextActive.name}.`;
       return { next, logs: logEntries, speech: msg, resetTimers: true };
+    } else if (action === 'reorder_queue') {
+      if (!elevated) return null;
+      const { fromIdx, toIdx } = payload;
+      const len = next.waiting_list.length;
+      if (fromIdx < 0 || fromIdx >= len || toIdx < 0 || toIdx >= len) return null;
+      const [moved] = next.waiting_list.splice(fromIdx, 1);
+      next.waiting_list.splice(toIdx, 0, moved);
+      logEntries.push(`QUEUE: ${moved.name} moved to position ${toIdx + 1}.`);
+      return { next, logs: logEntries, resetTimers: true };
     } else if (action === 'finish_match') {
-      const { courtIdx, matchWinners } = payload;
+      const { courtIdx, matchWinners, scoreA, scoreB } = payload;
       const cIdx = courtIdx.toString();
       const courtPlayers: any[] = next.court_occupants[cIdx] || [];
       if (!courtPlayers.length) return null;
@@ -383,15 +417,194 @@ export function useClubSession() {
       const finishHalf = Math.floor(courtPlayers.length / 2);
       const team1 = courtPlayers.slice(0, finishHalf).map((p: any) => p.name);
       const team2 = courtPlayers.slice(finishHalf).map((p: any) => p.name);
-      next.match_history = [
-        { date: new Date().toISOString(), court: parseInt(cIdx) + 1, team1, team2, winners: validWinners } as any,
-        ...next.match_history,
-      ].slice(0, 100);
-      next.waiting_list = [...next.waiting_list, ...courtPlayers];
+      const historyEntry: any = {
+        date: new Date().toISOString(),
+        court: parseInt(cIdx) + 1,
+        team1,
+        team2,
+        winners: validWinners,
+        ...(scoreA !== undefined ? { scoreA, scoreB } : {}),
+      };
+      next.match_history = [historyEntry, ...next.match_history].slice(0, 100);
+      const rotationMode = next.rotation_mode ?? 'standard';
+      if (rotationMode !== 'standard' && validWinners.length > 0) {
+        const winnerSet = new Set(validWinners);
+        const winnerPlayers = courtPlayers.filter((p: any) => winnerSet.has(p.name));
+        const loserPlayers = courtPlayers.filter((p: any) => !winnerSet.has(p.name));
+        if (rotationMode === 'winner_stays') {
+          // Winners jump to front of queue; losers appended to back
+          next.waiting_list = [...winnerPlayers, ...next.waiting_list, ...loserPlayers];
+        } else {
+          // loser_stays: losers jump to front; winners appended to back
+          next.waiting_list = [...loserPlayers, ...next.waiting_list, ...winnerPlayers];
+        }
+      } else {
+        next.waiting_list = [...next.waiting_list, ...courtPlayers];
+      }
       delete next.court_occupants[cIdx];
       next.saved_queue = [...next.waiting_list];
       logEntries.push(`MATCH: ${getSportConfig(next.sport).court} ${parseInt(cIdx) + 1} finished. Winners: ${validWinners.join(', ') || 'none'}`);
       return { next, logs: logEntries, resetTimers: true };
+    }
+
+    // ── Tournament actions ───────────────────────────────────────────────────
+    if (action === 'tournament_start') {
+      if (!req._fromHost) return null;
+      const t = payload.tournament as Tournament;
+      // Pull tournament players out of the waiting list
+      const tournamentNames = new Set(t.teams.flatMap((tm: any) => tm.players as string[]));
+      const originalQueue = next.waiting_list.filter((p: any) => tournamentNames.has(p.name));
+      next.waiting_list = next.waiting_list.filter((p: any) => !tournamentNames.has(p.name));
+      next.tournament = { ...t, originalQueue };
+      logEntries.push('TOURNAMENT: Started');
+      return { next, logs: logEntries };
+    }
+
+    if (action === 'tournament_end') {
+      if (!req._fromHost) return null;
+      // Restore players to waiting list
+      if (next.tournament?.originalQueue?.length) {
+        const alreadyIn = new Set(next.waiting_list.map((p: any) => p.name));
+        const toRestore = next.tournament.originalQueue.filter((p: any) => !alreadyIn.has(p.name));
+        next.waiting_list = [...toRestore, ...next.waiting_list];
+      }
+      next.tournament = null;
+      logEntries.push('TOURNAMENT: Ended');
+      return { next, logs: logEntries };
+    }
+
+    if (action === 'tournament_super_score') {
+      if (!next.tournament || next.tournament.format !== 'super') return null;
+      const { matchId, score } = payload;
+      // Security: guest can only submit their own name
+      const submitter = requesterName || sanitiseName(payload.playerName || '');
+      if (!req._fromHost && submitter !== requesterName) return null;
+      const playerName = req._fromHost ? sanitiseName(payload.playerName || '') : requesterName;
+      if (!playerName) return null;
+      const t: Tournament = JSON.parse(JSON.stringify(next.tournament));
+      const mIdx = t.matches.findIndex((m: TournamentMatch) => m.id === matchId);
+      if (mIdx === -1 || t.matches[mIdx].winnerId !== null) return null;
+      t.matches[mIdx] = {
+        ...t.matches[mIdx],
+        pendingScores: { ...(t.matches[mIdx].pendingScores ?? {}), [playerName]: parseInt(score, 10) || 0 },
+      };
+      next.tournament = t;
+      logEntries.push(`TOURNAMENT: ${playerName} submitted score ${score}`);
+      return { next, logs: logEntries };
+    }
+
+    if (action === 'start_tournament_match') {
+      if (!req._fromHost) return null;
+      const { matchId, courtIdx, players } = payload;
+      if (!next.tournament) return null;
+      const t: Tournament = JSON.parse(JSON.stringify(next.tournament));
+      const mIdx = t.matches.findIndex((m: TournamentMatch) => m.id === matchId);
+      if (mIdx === -1 || t.matches[mIdx].winnerId !== null) return null;
+      t.matches[mIdx] = { ...t.matches[mIdx], courtIdx };
+      next.tournament = t;
+      // Place players on court
+      next.court_occupants = { ...next.court_occupants, [String(courtIdx)]: players };
+      logEntries.push(`TOURNAMENT: Match started on court ${courtIdx + 1}`);
+      return { next, logs: logEntries };
+    }
+
+    if (action === 'tournament_super_game1') {
+      if (!req._fromHost) return null;
+      const { matchId, game1Scores } = payload;
+      if (!next.tournament) return null;
+      const t: Tournament = JSON.parse(JSON.stringify(next.tournament));
+      const mIdx = t.matches.findIndex((m: TournamentMatch) => m.id === matchId);
+      if (mIdx === -1 || t.matches[mIdx].game1Complete) return null;
+      const match = t.matches[mIdx];
+      const team1Players = t.teams.find(tm => tm.id === match.team1Id)?.players ?? [];
+      const team2Players = t.teams.find(tm => tm.id === match.team2Id)?.players ?? [];
+      // Use originalQueue for gender lookup (players removed from waiting_list during tournament)
+      const rosterLookup = [...(t.originalQueue ?? []), ...next.waiting_list];
+      let game2Team1 = team1Players;
+      let game2Team2 = team2Players;
+      if (t.swapTeams !== false) {
+        const mixed = isMixedTeam(team1Players, rosterLookup);
+        ({ game2Team1, game2Team2 } = computeGame2Teams(team1Players, team2Players, rosterLookup, mixed));
+      }
+      t.matches[mIdx] = { ...match, game1Scores, game1Complete: true, game2Team1, game2Team2, pendingScores: undefined };
+      next.tournament = t;
+      logEntries.push(`TOURNAMENT: Super game 1 recorded for match ${matchId}`);
+      return { next, logs: logEntries };
+    }
+
+    if (action === 'tournament_match_result') {
+      if (!req._fromHost) return null;
+      const { matchId, winnerId, scoreA: tScoreA, scoreB: tScoreB, game2Scores } = payload;
+      if (!next.tournament) return null;
+      const t: Tournament = JSON.parse(JSON.stringify(next.tournament));
+      const mIdx = t.matches.findIndex((m: TournamentMatch) => m.id === matchId);
+      if (mIdx === -1 || t.matches[mIdx].winnerId !== null) return null;
+      const match = t.matches[mIdx];
+
+      if (t.format === 'super') {
+        // Super mode: record game 2 scores and close match
+        t.matches[mIdx] = {
+          ...match,
+          game2Scores,
+          winnerId: '__super__',
+          timestamp: new Date().toISOString(),
+          courtIdx: undefined,
+          pendingScores: undefined,
+        };
+        // Update team compositions so future matches use the swapped lineup (only if swapTeams)
+        if (t.swapTeams !== false) {
+          const team1Obj = t.teams.find((tm: any) => tm.id === match.team1Id);
+          const team2Obj = t.teams.find((tm: any) => tm.id === match.team2Id);
+          if (team1Obj && match.game2Team1?.length) team1Obj.players = match.game2Team1;
+          if (team2Obj && match.game2Team2?.length) team2Obj.players = match.game2Team2;
+        }
+        t.superPlayerScores = recalcSuperScores(t.matches);
+        const allDone = t.matches.every(m => m.winnerId !== null);
+        if (allDone) {
+          t.state = 'completed';
+          const sorted = Object.entries(t.superPlayerScores).sort(([, a], [, b]) => b - a);
+          t.champion = sorted[0]?.[0] ?? undefined;
+        }
+      } else {
+        // Standard mode
+        t.matches[mIdx] = {
+          ...match,
+          winnerId,
+          scoreA: tScoreA,
+          scoreB: tScoreB,
+          timestamp: new Date().toISOString(),
+          courtIdx: undefined,
+        };
+        if (t.format === 'round_robin') {
+          t.teams = recalcStandings(t.teams, t.matches);
+          if (t.matches.every(m => m.winnerId !== null)) {
+            t.state = 'completed';
+            t.champion = [...t.teams].sort((a, b) => b.points - a.points || b.wins - a.wins)[0]?.id;
+          }
+        } else {
+          // Knockout
+          if (isRoundComplete(t.matches, t.currentKnockoutRound)) {
+            const advancers = knockoutAdvancers(t.matches, t.currentKnockoutRound, t.teams);
+            if (advancers.length === 1) {
+              t.state = 'completed';
+              t.champion = advancers[0].id;
+            } else {
+              t.currentKnockoutRound++;
+              t.matches.push(...generateKnockoutRound(advancers, t.currentKnockoutRound));
+            }
+          }
+        }
+      }
+
+      // Remove players from court
+      const courtKey = Object.keys(next.court_occupants).find(
+        k => t.matches[mIdx] && String(match.courtIdx) === k,
+      );
+      if (courtKey !== undefined) delete next.court_occupants[courtKey];
+
+      next.tournament = t;
+      logEntries.push(`TOURNAMENT: Match ${matchId} result recorded`);
+      return { next, logs: logEntries };
     }
 
     return { next, logs: logEntries };
@@ -425,10 +638,26 @@ export function useClubSession() {
     }
 
     const { next, logs: resultLogs, speech, resetTimers, noWrite } = result;
+    if (!noWrite) prevClubRef.current = prevClub;
     setClub(next);
     resultLogs.forEach(addLog);
     if (speech) Speech.speak(speech, { language: ttsVoiceRef.current });
     if (resetTimers) { secondsCounter.current = 0; currentTopPlayerRef.current = ''; }
+
+    if (req.action === 'start_match' || req.action === 'start_tournament_match') {
+      const cIdx = parseInt(req.payload?.courtIdx ?? -1);
+      if (!isNaN(cIdx) && cIdx >= 0) {
+        courtStartTimes.current[cIdx.toString()] = Date.now();
+        delete courtDurationAlerted.current[cIdx.toString()];
+      }
+    }
+    if (req.action === 'finish_match' || req.action === 'tournament_match_result') {
+      const cIdx = (req.payload?.courtIdx ?? req.payload?.matchId ?? '').toString();
+      if (cIdx) {
+        delete courtStartTimes.current[cIdx];
+        delete courtDurationAlerted.current[cIdx];
+      }
+    }
 
     if (noWrite) {
       if (req.id) await supabase.from('requests').delete().eq('id', req.id);
@@ -441,6 +670,7 @@ export function useClubSession() {
       court_occupants: next.court_occupants,
       match_history: next.match_history,
       saved_queue: next.saved_queue,
+      tournament: next.tournament ?? null,
       ...(next.power_guest_pin !== undefined ? { power_guest_pin: next.power_guest_pin } : {}),
     }).eq('id', cidRef.current);
 
@@ -498,8 +728,16 @@ export function useClubSession() {
       const males = eligible.filter((p: any) => p.gender !== 'F');
       const females = eligible.filter((p: any) => p.gender === 'F');
       if (males.length >= half && females.length >= half) {
+        // MF vs MF (or half+half for other sports)
         selected = [...males.slice(0, half), ...females.slice(0, half)];
+      } else if (males.length >= playersPerGame) {
+        // MM vs MM — enough males for a full game
+        selected = males.slice(0, playersPerGame);
+      } else if (females.length >= playersPerGame) {
+        // FF vs FF — enough females for a full game
+        selected = females.slice(0, playersPerGame);
       } else {
+        // No valid balanced option — last resort, take front of queue
         selected = eligible.slice(0, playersPerGame);
       }
     } else {
@@ -536,7 +774,8 @@ export function useClubSession() {
     setIsProcessingAction(true);
     try {
       const players = selectedQueueIdx.map((i) => club.waiting_list[i]).filter(Boolean);
-      if (players.length !== selectedQueueIdx.length) {
+      if (players.length !== selectedQueueIdx.length ||
+          players.some((p, i) => p?.name !== club.waiting_list[selectedQueueIdx[i]]?.name)) {
         Alert.alert('Queue Changed', 'The queue has changed since you selected. Please select again.');
         onQueueChanged?.();
         return;
@@ -549,10 +788,31 @@ export function useClubSession() {
     }
   };
 
-  const finishMatch = (courtResult: CourtResult, winners: string[]) => {
-    const payload = { courtIdx: courtResult.courtIdx, matchWinners: winners, returningPlayers: courtResult.players };
+  const finishMatch = (courtResult: CourtResult, winners: string[], scoreA?: number, scoreB?: number) => {
+    const payload = {
+      courtIdx: courtResult.courtIdx,
+      matchWinners: winners,
+      returningPlayers: courtResult.players,
+      ...(scoreA !== undefined ? { scoreA, scoreB } : {}),
+    };
     if (isHost) processRequest({ action: 'finish_match', payload, _fromHost: true });
     else sendReq('finish_match', payload);
+  };
+
+  const undoLastAction = async () => {
+    const snapshot = prevClubRef.current;
+    if (!snapshot) { Alert.alert('Nothing to Undo', 'No previous state to restore.'); return; }
+    prevClubRef.current = null;
+    setClub(snapshot);
+    await supabase.from('clubs').update({
+      waiting_list: snapshot.waiting_list,
+      master_roster: snapshot.master_roster,
+      court_occupants: snapshot.court_occupants,
+      match_history: snapshot.match_history,
+      saved_queue: snapshot.saved_queue,
+      tournament: snapshot.tournament ?? null,
+    }).eq('id', cidRef.current);
+    addLog('SYSTEM: Undo applied.');
   };
 
   // substituteCourtIdx and substituteOutPlayer are shell state; caller passes them in
@@ -734,6 +994,24 @@ export function useClubSession() {
         }
       }
 
+      // ── Target game duration alerts ──────────────────────────────────────
+      const targetMins = c?.target_game_duration ?? 0;
+      if (c && targetMins > 0) {
+        const targetMs = targetMins * 60_000;
+        const sportCourtLabel = getSportConfig(c.sport).court;
+        Object.entries(courtStartTimes.current).forEach(([cKey, startMs]) => {
+          if (!courtDurationAlerted.current[cKey] && now - startMs >= targetMs) {
+            courtDurationAlerted.current[cKey] = true;
+            const courtNum = parseInt(cKey) + 1;
+            Speech.speak(
+              `${sportCourtLabel} ${courtNum} — game time exceeded. Please wrap up.`,
+              { language: ttsVoiceRef.current },
+            );
+            addLog(`TIMER: ${sportCourtLabel} ${courtNum} exceeded ${targetMins} min target.`);
+          }
+        });
+      }
+
       if (!c?.waiting_list?.length) { secondsCounter.current = 0; currentTopPlayerRef.current = ''; return; }
       const firstActive = c.waiting_list.find((w: any) => !w.isResting);
       if (!firstActive) { secondsCounter.current = 0; currentTopPlayerRef.current = ''; return; }
@@ -813,6 +1091,7 @@ export function useClubSession() {
 
     // Refs exposed
     hasShownStartupRef,
+    courtStartTimes,
 
     // Logging
     logs,
@@ -840,5 +1119,6 @@ export function useClubSession() {
     // Takes substituteCourtIdx and substituteOutPlayer from shell
     doSubstitute,
     claimPowerGuest,
+    undoLastAction,
   };
 }

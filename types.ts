@@ -10,6 +10,7 @@ export interface QueuePlayer {
   gender: 'M' | 'F';
   isResting?: boolean;
   isPowerGuest?: boolean;
+  notes?: string;
 }
 
 export interface MatchRecord {
@@ -17,7 +18,59 @@ export interface MatchRecord {
   team2: string[];
   winners: string[];
   court?: number;
+  timestamp?: string | number;
+  scoreA?: number;
+  scoreB?: number;
+}
+
+export interface TournamentTeam {
+  id: string;
+  name: string;
+  players: string[];
+  wins: number;
+  losses: number;
+  draws: number;
+  points: number;
+  matchesPlayed: number;
+}
+
+export interface TournamentMatch {
+  id: string;
+  team1Id: string;
+  team2Id: string;
+  winnerId: string | null;
+  scoreA?: number;
+  scoreB?: number;
   timestamp?: string;
+  round: number;
+  courtIdx?: number;
+  // Super tournament fields
+  game1Scores?: Record<string, number>;
+  game2Scores?: Record<string, number>;
+  game2Team1?: string[];
+  game2Team2?: string[];
+  game1Complete?: boolean;
+  // Live player score submissions (super mode)
+  pendingScores?: Record<string, number>;
+}
+
+export interface Tournament {
+  id: string;
+  format: 'round_robin' | 'knockout' | 'super';
+  teamSize: number;
+  rounds: number;
+  genderBalancedTeams: boolean;
+  state: 'in_progress' | 'completed';
+  teams: TournamentTeam[];
+  matches: TournamentMatch[];
+  currentKnockoutRound: number;
+  champion?: string;
+  createdAt: string;
+  superPlayerScores?: Record<string, number>;
+  // Players removed from waiting_list during tournament; restored on end
+  originalQueue?: QueuePlayer[];
+  // If true, players swap team partners after game 1 in Super mode
+  swapTeams?: boolean;
 }
 
 export interface CourtResult {
@@ -43,4 +96,7 @@ export interface Club {
   power_guest_pin: string | null;
   has_power_guest_pin?: boolean; // generated column — use this for display logic instead of power_guest_pin
   sport?: string | null;
+  tournament?: Tournament | null;
+  rotation_mode?: 'standard' | 'winner_stays' | 'loser_stays';
+  target_game_duration?: number | null; // minutes, null/0 = disabled
 }
