@@ -520,7 +520,6 @@ export default function Dashboard() {
                 isHost={isHost}
                 courtLabel={courtLabel}
                 courtOccupants={club.court_occupants || {}}
-                myName={myName}
                 onStartMatch={(match) => {
                   // Find a free court
                   const busyCourts = new Set(Object.keys(club.court_occupants || {}).map(Number));
@@ -548,7 +547,6 @@ export default function Dashboard() {
                   ]);
                 }}
                 onTeamPress={(team) => setSelectedTeamDetail(team)}
-                onSubmitScore={(matchId, score) => sendReq('tournament_super_score', { matchId, score })}
               />
             ) : (
               <QueuePanel
@@ -718,22 +716,17 @@ export default function Dashboard() {
         match={activeTournamentMatch}
         teams={club?.tournament?.teams || []}
         format={club?.tournament?.format ?? 'round_robin'}
-        waitingList={club?.waiting_list || []}
+        roster={[...(club?.tournament?.originalQueue ?? []), ...(club?.waiting_list ?? [])]}
+        swapTeams={club?.tournament?.swapTeams}
         onConfirmStandard={(winnerId, scoreA, scoreB) => {
           if (!activeTournamentMatch) return;
           processRequest({ action: 'tournament_match_result', payload: { matchId: activeTournamentMatch.id, winnerId, scoreA, scoreB }, _fromHost: true });
           setShowTournamentResult(false);
           setActiveTournamentMatch(null);
         }}
-        onConfirmSuperGame1={(scores) => {
+        onConfirmSuper={(scores) => {
           if (!activeTournamentMatch) return;
-          processRequest({ action: 'tournament_super_game1', payload: { matchId: activeTournamentMatch.id, game1Scores: scores }, _fromHost: true });
-          setShowTournamentResult(false);
-          setActiveTournamentMatch(null);
-        }}
-        onConfirmSuperGame2={(scores) => {
-          if (!activeTournamentMatch) return;
-          processRequest({ action: 'tournament_match_result', payload: { matchId: activeTournamentMatch.id, game2Scores: scores }, _fromHost: true });
+          processRequest({ action: 'tournament_match_result', payload: { matchId: activeTournamentMatch.id, combinedScores: scores }, _fromHost: true });
           setShowTournamentResult(false);
           setActiveTournamentMatch(null);
         }}
