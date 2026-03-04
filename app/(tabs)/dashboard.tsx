@@ -14,8 +14,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Image, Modal, Platform, ScrollView,
-  Text, TextInput, TouchableOpacity, useWindowDimensions, View,
+  ActivityIndicator, Alert, Platform, ScrollView,
+  Text, useWindowDimensions, View,
 } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
 import { supabase } from '../../supabase';
@@ -23,13 +23,16 @@ import { Club, CourtResult, Player, QueuePlayer } from '../../types';
 import { makeStyles } from '../../components/dashboard/dashboardStyles';
 import {
   ClubQRModal, LeaderboardModal, MatchHistoryModal,
-  SystemLogsModal, HelpModal, PlayerProfileModal,
+  SystemLogsModal, HelpModal, PlayerProfileModal, SessionSummaryModal,
 } from '../../components/dashboard/InfoModals';
 import {
   CourtAssignModal, MatchResultModal, SubstituteModal,
-  SetupPinModal, EnterPinModal, SportSetupModal, SessionStartupModal,
+  SetupPinModal, EnterPinModal, SportSetupModal, SessionStartupModal, BatchAddModal,
+  GuidedSetupWizard,
 } from '../../components/dashboard/ActionModals';
 import { useClubSession } from '../../hooks/useClubSession';
+import { DashboardHeader } from '../../components/dashboard/DashboardHeader';
+import { GuestStatusBanner } from '../../components/dashboard/GuestStatusBanner';
 import { CourtsGrid } from '../../components/dashboard/CourtsGrid';
 import { QueuePanel } from '../../components/dashboard/QueuePanel';
 import { SettingsModal, TempSettings, DEFAULT_TEMP_SETTINGS } from '../../components/dashboard/SettingsModal';
@@ -63,6 +66,7 @@ export default function Dashboard() {
     hasShownStartupRef, logs, addLog, getRoster, updateRoster, safeEqual,
     shareSessionStats, exportStats, processRequest, sendReq,
     grantPowerGuest, handleAutoPick, assignCourt, finishMatch, doSubstitute, claimPowerGuest,
+    undoLastAction, courtStartTimes,
   } = session;
 
   // ─── Courts & Queue ────────────────────────────────────────────────────────
@@ -70,6 +74,8 @@ export default function Dashboard() {
   const [showResult, setShowResult] = useState<CourtResult | null>(null);
   const [selectedQueueIdx, setSelectedQueueIdx] = useState<number[]>([]);
   const [winners, setWinners] = useState<string[]>([]);
+  const [scoreA, setScoreA] = useState('');
+  const [scoreB, setScoreB] = useState('');
 
   // ─── Player Manager ────────────────────────────────────────────────────────
   const [showPlayers, setShowPlayers] = useState(false);
@@ -100,11 +106,12 @@ export default function Dashboard() {
   const [showStartup, setShowStartup] = useState(false);
   const [startupCourts, setStartupCourts] = useState(4);
   const [showMatchHistory, setShowMatchHistory] = useState(false);
+  const [showSessionSummary, setShowSessionSummary] = useState(false);
+  const [showBatchAdd, setShowBatchAdd] = useState(false);
+  const [showSetupGuide, setShowSetupGuide] = useState(false);
   const [showSubstitute, setShowSubstitute] = useState(false);
   const [substituteCourtIdx, setSubstituteCourtIdx] = useState('');
   const [substituteOutPlayer, setSubstituteOutPlayer] = useState('');
-  const [showPowerGuestPrompt, setShowPowerGuestPrompt] = useState(false);
-  const [powerGuestPinInput, setPowerGuestPinInput] = useState('');
   const [showPlayerProfile, setShowPlayerProfile] = useState<Player | null>(null);
   const [showSportSetup, setShowSportSetup] = useState(false);
 
@@ -268,25 +275,31 @@ export default function Dashboard() {
 
   const resetSession = () => {
     if (!isHost) return;
-    Alert.alert('Reset Session?', 'Clear queue and courts? (Stats remain safe)', [
-      { text: 'Cancel' },
-      { text: 'Reset', style: 'destructive', onPress: async () => {
-        setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {} }));
-        await supabase.from('clubs').update({ waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
-        addLog('SYSTEM: Reset Session.'); setShowSettings(false);
-      }},
-    ]);
+    setShowSettings(false);
+    setTimeout(() => {
+      Alert.alert('Reset Session?', 'Clear queue and courts? (Stats remain safe)', [
+        { text: 'Cancel' },
+        { text: 'Reset', style: 'destructive', onPress: async () => {
+          setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {} }));
+          await supabase.from('clubs').update({ waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
+          addLog('SYSTEM: Reset Session.');
+        }},
+      ]);
+    }, 350);
   };
 
   const executeFullWipe = () => {
-    Alert.alert('WIPE ALL?', 'This permanently deletes all players and stats.', [
-      { text: 'Cancel' },
-      { text: 'DELETE ALL', style: 'destructive', onPress: async () => {
-        setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {}, master_roster: {}, match_history: [] }));
-        await supabase.from('clubs').update({ waiting_list: [], court_occupants: {}, master_roster: {}, match_history: [] }).eq('id', cidRef.current);
-        addLog('SYSTEM: Full Wipe.'); setShowSettings(false);
-      }},
-    ]);
+    setShowSettings(false);
+    setTimeout(() => {
+      Alert.alert('WIPE ALL?', 'This permanently deletes all players and stats.', [
+        { text: 'Cancel' },
+        { text: 'DELETE ALL', style: 'destructive', onPress: async () => {
+          setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {}, master_roster: {}, match_history: [] }));
+          await supabase.from('clubs').update({ waiting_list: [], court_occupants: {}, master_roster: {}, match_history: [] }).eq('id', cidRef.current);
+          addLog('SYSTEM: Full Wipe.');
+        }},
+      ]);
+    }, 350);
   };
 
   const fullWipe = async () => {
@@ -394,20 +407,17 @@ export default function Dashboard() {
     setSubstituteCourtIdx(courtIdx); setSubstituteOutPlayer(outPlayer); setShowSubstitute(true);
   };
 
-  const signOut = () => Alert.alert('Sign Out', 'Sign out and return to the home screen?', [
-    { text: 'Cancel', style: 'cancel' },
-    { text: 'Sign Out', style: 'destructive', onPress: async () => {
-      setShowSettings(false);
-      await supabase.auth.signOut().catch(() => {});
-      await AsyncStorage.multiRemove(['currentClubId', 'isHost', 'guestName']).catch(() => {});
-      router.replace('/');
-    }},
-  ]);
+  const signOut = async () => {
+    setShowSettings(false);
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+    await AsyncStorage.multiRemove(['currentClubId', 'isHost', 'guestName', 'theme_mode']).catch(() => {});
+    router.replace('/');
+  };
 
   const goMyClubs = async () => {
     setShowSettings(false);
     await AsyncStorage.removeItem('currentClubId');
-    router.replace('/');
+    router.replace({ pathname: '/', params: { showPicker: '1' } });
   };
 
   // ─── Derived ──────────────────────────────────────────────────────────────
@@ -432,72 +442,34 @@ export default function Dashboard() {
         </View>
       )}
 
-      {/* ── POWER GUEST CLAIM MODAL ── */}
-      <Modal visible={showPowerGuestPrompt} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>⚡ CLAIM POWER MODE</Text>
-            <Text style={{ color: colors.gray2, textAlign: 'center', marginBottom: 15 }}>Enter the session PIN to gain elevated controls</Text>
-            <TextInput style={styles.input} placeholder="Session PIN" placeholderTextColor={colors.gray3}
-              secureTextEntry keyboardType="numeric" maxLength={4} autoFocus
-              value={powerGuestPinInput} onChangeText={setPowerGuestPinInput} />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
-              <TouchableOpacity onPress={() => { setShowPowerGuestPrompt(false); setPowerGuestPinInput(''); }}>
-                <Text style={{ color: colors.gray1 }}>CANCEL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { claimPowerGuest(powerGuestPinInput); setPowerGuestPinInput(''); setShowPowerGuestPrompt(false); }}>
-                <Text style={{ color: colors.primary, fontWeight: 'bold' }}>UNLOCK</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {!isHost && isMyTurnBanner && (
-        <TouchableOpacity style={{ backgroundColor: colors.green, padding: 12, alignItems: 'center' }} onPress={() => setIsMyTurnBanner(false)}>
-          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 16 }}>{sportEmoji} IT'S YOUR TURN TO PICK A {courtLabel.toUpperCase()}! (tap to dismiss)</Text>
-        </TouchableOpacity>
-      )}
-
-      {!isHost && !isPowerGuest && (club?.has_power_guest_pin ?? club?.power_guest_pin) && (
-        <TouchableOpacity style={{ backgroundColor: colors.deepBlue, padding: 10, alignItems: 'center' }} onPress={() => { setPowerGuestPinInput(''); setShowPowerGuestPrompt(true); }}>
-          <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 13 }}>⚡ CLAIM POWER MODE</Text>
-        </TouchableOpacity>
-      )}
-
-      {!isHost && myQueuePos >= 0 && !isMyTurnBanner && (
-        <View style={{ backgroundColor: colors.surfaceHigh, padding: 8, alignItems: 'center' }}>
-          <Text style={{ color: colors.gray2, fontSize: 12 }}>
-            Your position: <Text style={{ color: colors.primary, fontWeight: 'bold' }}>#{myQueuePos + 1}</Text>
-            {activeBeforeMe > 0 ? `  •  ${activeBeforeMe} ahead of you` : "  •  You're next!"}
-          </Text>
-        </View>
-      )}
+      <GuestStatusBanner
+        isHost={isHost}
+        isPowerGuest={isPowerGuest}
+        isOnline={isOnline}
+        isMyTurnBanner={isMyTurnBanner}
+        sportEmoji={sportEmoji}
+        courtLabel={courtLabel}
+        hasPowerGuestPin={!!(club?.has_power_guest_pin ?? club?.power_guest_pin)}
+        myQueuePos={myQueuePos}
+        activeBeforeMe={activeBeforeMe}
+        myName={myName}
+        courtOccupants={club.court_occupants || {}}
+        playersPerGame={playersPerGame}
+        onDismissTurnBanner={() => setIsMyTurnBanner(false)}
+        onClaimPowerGuest={claimPowerGuest}
+      />
 
       {/* ── HEADER ── */}
-      <View style={styles.header}>
-        <TouchableOpacity style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }} onPress={() => setShowQR(true)}>
-          {club.club_logo_url ? <Image source={{ uri: club.club_logo_url }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }} /> : null}
-          <View>
-            <Text style={styles.title} numberOfLines={1}>{club.club_name || `My ${sportLabel} Club`}</Text>
-            {isHost && hostNickname && hostNickname !== 'Host' ? <Text style={{ color: colors.gray3, fontSize: 11 }}>Host: {hostNickname}</Text> : null}
-            <Text style={styles.idText}>ID: {club.id}  (tap for QR)</Text>
-          </View>
-        </TouchableOpacity>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <TouchableOpacity style={[styles.settingsBtn, { marginRight: 4 }]} onPress={() => setShowHelp(true)}>
-            <Text style={{ fontSize: 18, color: colors.gray2, fontWeight: 'bold' }}>?</Text>
-          </TouchableOpacity>
-          {isHost && <TouchableOpacity style={styles.settingsBtn} onPress={openSettings}><Text style={{ fontSize: 20 }}>⚙️</Text></TouchableOpacity>}
-          <TouchableOpacity style={styles.btnDanger} onPress={async () => {
-            const leave = async () => { if (!isHost) sendReq('leave'); await AsyncStorage.multiRemove(['currentClubId', 'isHost']).catch(() => {}); router.replace('/'); };
-            if (Platform.OS === 'web') { if (window.confirm('Leave this session?')) await leave(); }
-            else Alert.alert('Leave Session?', 'Are you sure?', [{ text: 'Cancel', style: 'cancel' }, { text: 'Leave', style: 'destructive', onPress: leave }]);
-          }}>
-            <Text style={styles.btnText}>LEAVE</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
+      <DashboardHeader
+        club={club}
+        isHost={isHost}
+        hostNickname={hostNickname}
+        sportLabel={sportLabel}
+        onPressQR={() => setShowQR(true)}
+        onPressHelp={() => setShowHelp(true)}
+        onPressSettings={openSettings}
+        onLeave={() => { if (!isHost) sendReq('leave'); }}
+      />
 
       {/* ── MAIN CONTENT ── */}
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
@@ -508,6 +480,7 @@ export default function Dashboard() {
               courtOccupants={club.court_occupants || {}}
               courtLabel={courtLabel} sportEmoji={sportEmoji}
               isHost={isHost} isPowerGuest={isPowerGuest} isProcessingAction={isProcessingAction}
+              courtStartTimes={courtStartTimes}
               onFinishMatch={(courtIdx, players) => setShowResult({ courtIdx, players })}
               onSubstitute={openSubstitute}
             />
@@ -532,6 +505,16 @@ export default function Dashboard() {
                 else sendReq('leave');
               }}
               onGrantPowerGuest={grantPowerGuest}
+              onUndo={isHost ? undoLastAction : undefined}
+              onMoveUp={(i) => {
+                if (isHost) processRequest({ action: 'reorder_queue', payload: { fromIdx: i, toIdx: i - 1 }, _fromHost: true });
+                else sendReq('reorder_queue', { fromIdx: i, toIdx: i - 1 });
+              }}
+              onMoveDown={(i) => {
+                if (isHost) processRequest({ action: 'reorder_queue', payload: { fromIdx: i, toIdx: i + 1 }, _fromHost: true });
+                else sendReq('reorder_queue', { fromIdx: i, toIdx: i + 1 });
+              }}
+              onBatchAdd={isHost || isPowerGuest ? () => setShowBatchAdd(true) : undefined}
             />
           </View>
         </View>
@@ -570,9 +553,11 @@ export default function Dashboard() {
         onShowLogs={() => { setShowSettings(false); setShowLogs(true); }}
         onShowLeaderboard={() => { setShowSettings(false); setShowLeaderboard(true); }}
         onShowMatchHistory={() => { setShowSettings(false); setShowMatchHistory(true); }}
+        onShowSessionSummary={() => { setShowSettings(false); setShowSessionSummary(true); }}
         onShowInviteQR={() => { setShowSettings(false); setShowJoinQR(true); }}
         onToggleTheme={toggleTheme} onSignOut={signOut} onMyClubs={goMyClubs}
         onPinToggle={handlePinToggle} onPowerGuestToggle={handlePowerGuestToggle}
+        onShowSetupGuide={() => { setShowSettings(false); setShowSetupGuide(true); }}
       />
 
       <HelpModal visible={showHelp} sportEmoji={sportEmoji} courtLabel={courtLabel} onClose={() => setShowHelp(false)} />
@@ -580,7 +565,7 @@ export default function Dashboard() {
       <CourtAssignModal visible={showCourts} selectedQueueIdx={selectedQueueIdx}
         waitingList={club.waiting_list || []} activeCourts={club.active_courts || 4}
         courtOccupants={club.court_occupants || {}} courtLabel={courtLabel}
-        isProcessingAction={isProcessingAction}
+        playersPerGame={playersPerGame} isProcessingAction={isProcessingAction}
         onAssignCourt={(courtIdx) => {
           assignCourt(courtIdx, selectedQueueIdx, () => { setSelectedQueueIdx([]); setShowCourts(false); })
             .then(() => { setSelectedQueueIdx([]); setShowCourts(false); });
@@ -588,13 +573,21 @@ export default function Dashboard() {
         onCancel={() => { setShowCourts(false); setSelectedQueueIdx([]); }} />
 
       <MatchResultModal visible={!!showResult} courtResult={showResult} winners={winners}
+        scoreA={scoreA} scoreB={scoreB}
+        onScoreAChange={setScoreA} onScoreBChange={setScoreB}
         onToggleWinner={(name) => {
           if (winners.includes(name)) setWinners(winners.filter(w => w !== name));
           else if (winners.length < 2) setWinners([...winners, name]);
           else Alert.alert('Max 2 winners', 'Deselect one first.');
         }}
-        onConfirm={() => { if (!showResult) return; finishMatch(showResult, winners); setWinners([]); setShowResult(null); }}
-        onCancel={() => { setShowResult(null); setWinners([]); }} />
+        onConfirm={() => {
+          if (!showResult) return;
+          const parsedA = scoreA !== '' ? parseInt(scoreA, 10) : undefined;
+          const parsedB = scoreB !== '' ? parseInt(scoreB, 10) : undefined;
+          finishMatch(showResult, winners, parsedA, parsedB);
+          setWinners([]); setScoreA(''); setScoreB(''); setShowResult(null);
+        }}
+        onCancel={() => { setShowResult(null); setWinners([]); setScoreA(''); setScoreB(''); }} />
 
       <SubstituteModal visible={showSubstitute} substituteCourtIdx={substituteCourtIdx}
         substituteOutPlayer={substituteOutPlayer} courtOccupants={club.court_occupants || {}}
@@ -607,6 +600,35 @@ export default function Dashboard() {
       <SystemLogsModal visible={showLogs} logs={logs} onClose={() => setShowLogs(false)} />
       <ClubQRModal visible={showJoinQR} title="INVITE PLAYERS" deepLink={`https://app.jastly.com/join?clubId=${club?.id}`} onClose={() => setShowJoinQR(false)} />
       <LeaderboardModal visible={showLeaderboard} leaderboard={leaderboard} onClose={() => setShowLeaderboard(false)} />
+      <SessionSummaryModal visible={showSessionSummary} matchHistory={matchHistory} roster={roster}
+        sportEmoji={sportEmoji} clubName={club?.club_name || ''} onClose={() => setShowSessionSummary(false)}
+        onShare={() => { setShowSessionSummary(false); shareSessionStats(); }} />
+      <BatchAddModal visible={showBatchAdd} onCancel={() => setShowBatchAdd(false)}
+        onAdd={async (names) => {
+          setShowBatchAdd(false);
+          const players = names.map(name => ({ name, gender: 'M' }));
+          if (isHost) await processRequest({ action: 'batch_join', payload: { players }, _fromHost: true });
+          else sendReq('batch_join', { players });
+        }} />
+
+      <GuidedSetupWizard
+        visible={showSetupGuide}
+        initialSport={tempSettings.sport}
+        initialCourts={tempSettings.courts}
+        initialGenderBalanced={tempSettings.genderBalanced}
+        initialAvoidRepeats={tempSettings.avoidRepeats}
+        queueLength={club?.waiting_list?.length || 0}
+        onManagePlayers={() => { setShowSetupGuide(false); setShowPlayers(true); }}
+        onBatchAdd={() => { setShowSetupGuide(false); setShowBatchAdd(true); }}
+        onInviteQR={() => { setShowSetupGuide(false); setShowJoinQR(true); }}
+        onClose={() => setShowSetupGuide(false)}
+        onFinish={async ({ sport, courts, genderBalanced, avoidRepeats }) => {
+          setShowSetupGuide(false);
+          setTempSettings(prev => ({ ...prev, sport, courts, genderBalanced, avoidRepeats }));
+          setClub((prev: any) => ({ ...prev, sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }));
+          await supabase.from('clubs').update({ sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }).eq('id', cidRef.current);
+        }}
+      />
 
       <SetupPinModal visible={showSetupPin} setupPin1={setupPin1} setupPin2={setupPin2} pinError={pinError}
         onChangePin1={(v) => { setSetupPin1(v); setPinError(false); }}

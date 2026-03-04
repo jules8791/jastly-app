@@ -12,7 +12,7 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Crypto from 'expo-crypto';
 import * as Linking from 'expo-linking';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -42,6 +42,7 @@ interface MyClub {
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const { showPicker } = useLocalSearchParams<{ showPicker?: string }>();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -167,7 +168,11 @@ export default function WelcomeScreen() {
       if (session && !session.user.is_anonymous) {
         const { data: clubs } = await supabase
           .from('clubs').select('id, club_name, sport, active_courts').eq('host_uid', session.user.id);
-        if (clubs && clubs.length === 1) {
+        if (clubs && clubs.length >= 1 && showPicker === '1') {
+          setMyClubs(clubs as MyClub[]);
+          setShowClubPicker(true);
+          return;
+        } else if (clubs && clubs.length === 1) {
           await AsyncStorage.setItem('currentClubId', clubs[0].id);
           await AsyncStorage.setItem('isHost', 'true');
           router.replace('/dashboard');
