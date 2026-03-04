@@ -513,6 +513,7 @@ export default function Dashboard() {
                 tournament={club.tournament}
                 isHost={isHost}
                 courtLabel={courtLabel}
+                courtOccupants={club.court_occupants || {}}
                 onStartMatch={(match) => {
                   // Find a free court
                   const busyCourts = new Set(Object.keys(club.court_occupants || {}).map(Number));
