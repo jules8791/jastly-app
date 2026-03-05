@@ -6,14 +6,14 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import * as Speech from 'expo-speech';
-import { Audio } from 'expo-av';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AppState, Platform, Share } from 'react-native';
 import { supabase } from '../supabase';
 import { Club, CourtResult, Player, QueuePlayer, Tournament, TournamentMatch } from '../types';
 import {
   computeGame2Teams, generateKnockoutRound, isRoundComplete, isMixedTeam,
-  knockoutAdvancers, recalcStandings, recalcSuperScores,
+  knockoutAdvancers, recalcStandings, recalcSuperScores, teamsPartnerships,
 } from '../utils/tournament';
 import { getSportConfig } from '../constants/sports';
 
@@ -69,6 +69,8 @@ export function useClubSession() {
   const lastInactiveCheckRef = useRef(0);
   const courtStartTimes = useRef<Record<string, number>>({});
   const courtDurationAlerted = useRef<Record<string, boolean>>({});
+  // Serve rotation — local host-side ref, not synced to DB
+  const [courtServe, setCourtServe] = useState<Record<string, string>>({});
   const prevClubRef = useRef<Club | null>(null);
 
   // ─── Keep refs in sync ───────────────────────────────────────────────────
@@ -84,9 +86,11 @@ export function useClubSession() {
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
   // ─── Derived: sport config ────────────────────────────────────────────────
-  const { emoji: sportEmoji, court: courtLabel, playersPerGame, label: sportLabel } = useMemo(
+  const { emoji: sportEmoji, court: courtLabel, playersPerGame: sportPlayersPerGame, label: sportLabel } = useMemo(
     () => getSportConfig(club?.sport), [club?.sport]
   );
+  // Club-level override (e.g. singles/doubles toggle)
+  const playersPerGame = club?.players_per_game || sportPlayersPerGame;
 
   // ─── Derived: power guest ─────────────────────────────────────────────────
   const isPowerGuest = !isHost && !!club?.waiting_list?.find(
@@ -152,14 +156,9 @@ export function useClubSession() {
   const playChime = async () => {
     if (Platform.OS === 'web' || !soundEnabledRef.current) return;
     try {
-      await Audio.setAudioModeAsync({ playsInSilentModeIOS: false });
-      const { sound } = await Audio.Sound.createAsync(
-        require('../assets/sounds/chime.mp3'),
-        { shouldPlay: true, volume: 1.0 }
-      );
-      sound.setOnPlaybackStatusUpdate(status => {
-        if (status.isLoaded && status.didJustFinish) sound.unloadAsync();
-      });
+      await setAudioModeAsync({ playsInSilentMode: false });
+      const player = createAudioPlayer(require('../assets/sounds/chime.mp3'));
+      player.play();
     } catch { /* file not added yet — silently skip */ }
   };
 
@@ -288,7 +287,8 @@ export function useClubSession() {
         if (!inRoster) {
           updateMR(r => [...r, { name: pName, gender: p.gender || 'M', games: 0, wins: 0 }]);
         }
-        if (!next.waiting_list.find((x: any) => x.name === pName)) {
+        const alreadyOnCourt = Object.values(next.court_occupants).flat().some((x: any) => x.name === pName);
+        if (!next.waiting_list.find((x: any) => x.name === pName) && !alreadyOnCourt) {
           next.waiting_list.push({ name: pName, gender: p.gender || 'M', isResting: false });
           addedCount++;
         }
@@ -358,7 +358,7 @@ export function useClubSession() {
       const cIdx = parseInt(courtIdx);
       if (isNaN(cIdx) || cIdx < 0 || cIdx >= (next.active_courts || 10)) return null;
       if (next.court_occupants[cIdx.toString()]) return null;
-      const sportPlayers = getSportConfig(next.sport).playersPerGame;
+      const sportPlayers = next.players_per_game || getSportConfig(next.sport).playersPerGame;
       if (!Array.isArray(players) || players.length !== sportPlayers) return null;
       const pNames: string[] = players.map((p: any) => sanitiseName(p.name));
       if (new Set(pNames).size !== sportPlayers || pNames.some(n => !n)) return null;
@@ -389,9 +389,55 @@ export function useClubSession() {
       const teamStr = (names: string[]) =>
         names.length === 1 ? names[0] : names.slice(0, -1).join(', ') + ' and ' + names[names.length - 1];
       let msg = `${sportCfg.court} ${cIdx + 1} ready. ${teamStr(t1Names)} versus ${teamStr(t2Names)}.`;
+      // Clear skipNext for all remaining queue players — they've been skipped for one round
+      next.waiting_list = next.waiting_list.map((w: any) => w.skipNext ? { ...w, skipNext: undefined } : w);
       const nextActive = next.waiting_list.find((w: any) => !w.isResting);
       if (nextActive) msg += ` Next up is ${nextActive.name}.`;
       return { next, logs: logEntries, speech: msg, resetTimers: true };
+    } else if (action === 'set_leaving_at') {
+      const { targetName, leavingAt } = payload;
+      const tName = sanitiseName(targetName || requesterName);
+      if (!elevated && tName !== requesterName) return null;
+      const idx = next.waiting_list.findIndex((w: any) => w.name === tName);
+      if (idx !== -1) {
+        next.waiting_list[idx] = { ...next.waiting_list[idx], leavingAt: leavingAt ?? undefined };
+        logEntries.push(`QUEUE: ${tName} leaving at ${leavingAt ? new Date(leavingAt).toLocaleTimeString() : 'cleared'}.`);
+      }
+      return { next, logs: logEntries };
+    } else if (action === 'set_skip_next') {
+      const tName = sanitiseName(payload.targetName || requesterName);
+      if (!elevated && tName !== requesterName) return null;
+      const idx = next.waiting_list.findIndex((w: any) => w.name === tName);
+      if (idx !== -1) {
+        const skip = !next.waiting_list[idx].skipNext;
+        next.waiting_list[idx] = { ...next.waiting_list[idx], skipNext: skip || undefined };
+        logEntries.push(`QUEUE: ${tName} will ${skip ? 'skip' : 'no longer skip'} the next game.`);
+      }
+      return { next, logs: logEntries };
+    } else if (action === 'advance_serve') {
+      // Host-side only: rotate serve to next player on the given court
+      if (!elevated) return null;
+      const { courtIdx: serveCourt } = payload;
+      const servePlayers: any[] = next.court_occupants[serveCourt.toString()] || [];
+      if (!servePlayers.length) return null;
+      setCourtServe(prev => {
+        const cur = prev[serveCourt];
+        const idx = servePlayers.findIndex((p: any) => p.name === cur);
+        const next2 = servePlayers[(idx + 1) % servePlayers.length]?.name ?? servePlayers[0]?.name;
+        return { ...prev, [serveCourt]: next2 };
+      });
+      return null; // no DB write needed
+    } else if (action === 'set_skill_level') {
+      if (!elevated) return null;
+      const { targetName, skillLevel } = payload;
+      const tName = sanitiseName(targetName);
+      // Update in waiting_list
+      const wIdx = next.waiting_list.findIndex((w: any) => w.name === tName);
+      if (wIdx !== -1) next.waiting_list[wIdx] = { ...next.waiting_list[wIdx], skillLevel };
+      // Update in roster
+      updateMR(r => r.map((p: Player) => p.name === tName ? { ...p, skillLevel } : p));
+      logEntries.push(`SKILL: ${tName} set to level ${skillLevel}.`);
+      return { next, logs: logEntries };
     } else if (action === 'reorder_queue') {
       if (!elevated) return null;
       const { fromIdx, toIdx } = payload;
@@ -414,6 +460,27 @@ export function useClubSession() {
         const cur = mr(); const mIdx = cur.findIndex((m: any) => m.name === wName);
         if (mIdx !== -1) updateMR(r => r.map((m, i) => i === mIdx ? { ...m, wins: (m.wins || 0) + 1 } : m));
       });
+      // ELO update
+      if (next.elo_enabled && validWinners.length > 0) {
+        const winnerSet = new Set(validWinners);
+        const half = Math.floor(courtPlayers.length / 2);
+        const eloWinners = courtPlayers.slice(0, half).filter((p: any) => winnerSet.has(p.name)).length > 0
+          ? courtPlayers.slice(0, half) : courtPlayers.slice(half);
+        const eloLosers = courtPlayers.filter((p: any) => !eloWinners.includes(p));
+        const getElo = (name: string) => mr().find((p: any) => p.name === name)?.elo ?? 1000;
+        const avgW = eloWinners.reduce((s: number, p: any) => s + getElo(p.name), 0) / Math.max(1, eloWinners.length);
+        const avgL = eloLosers.reduce((s: number, p: any) => s + getElo(p.name), 0) / Math.max(1, eloLosers.length);
+        const K = 32;
+        const eW = 1 / (1 + Math.pow(10, (avgL - avgW) / 400));
+        updateMR(r => r.map((p: Player) => {
+          if (eloWinners.some((w: any) => w.name === p.name))
+            return { ...p, elo: Math.round((p.elo ?? 1000) + K * (1 - eW)) };
+          if (eloLosers.some((l: any) => l.name === p.name))
+            return { ...p, elo: Math.max(100, Math.round((p.elo ?? 1000) + K * (0 - (1 - eW)))) };
+          return p;
+        }));
+        logEntries.push(`ELO: updated after match on court ${parseInt(cIdx) + 1}.`);
+      }
       const finishHalf = Math.floor(courtPlayers.length / 2);
       const team1 = courtPlayers.slice(0, finishHalf).map((p: any) => p.name);
       const team2 = courtPlayers.slice(finishHalf).map((p: any) => p.name);
@@ -427,21 +494,49 @@ export function useClubSession() {
       };
       next.match_history = [historyEntry, ...next.match_history].slice(0, 100);
       const rotationMode = next.rotation_mode ?? 'standard';
-      if (rotationMode !== 'standard' && validWinners.length > 0) {
+      if (rotationMode === 'challenger' && validWinners.length > 0) {
         const winnerSet = new Set(validWinners);
         const winnerPlayers = courtPlayers.filter((p: any) => winnerSet.has(p.name));
         const loserPlayers = courtPlayers.filter((p: any) => !winnerSet.has(p.name));
-        if (rotationMode === 'winner_stays') {
-          // Winners jump to front of queue; losers appended to back
-          next.waiting_list = [...winnerPlayers, ...next.waiting_list, ...loserPlayers];
+        const alreadyInQueue = new Set(next.waiting_list.map((p: any) => p.name));
+        const uniqueLosers = loserPlayers.filter((p: any) => !alreadyInQueue.has(p.name));
+        next.waiting_list = [...next.waiting_list, ...uniqueLosers];
+        // Pull next active players from queue as challengers
+        const spotsNeeded = courtPlayers.length - winnerPlayers.length;
+        const activeInQueue = next.waiting_list.filter((p: any) => !p.isResting);
+        if (activeInQueue.length >= spotsNeeded) {
+          const challengers: any[] = [];
+          const remaining: any[] = [];
+          let taken = 0;
+          for (const p of next.waiting_list) {
+            if (taken < spotsNeeded && !p.isResting) { challengers.push(p); taken++; }
+            else remaining.push(p);
+          }
+          next.waiting_list = remaining;
+          next.court_occupants[cIdx] = [...winnerPlayers, ...challengers];
         } else {
-          // loser_stays: losers jump to front; winners appended to back
-          next.waiting_list = [...loserPlayers, ...next.waiting_list, ...winnerPlayers];
+          // Not enough challengers — fall back to clearing court
+          delete next.court_occupants[cIdx];
         }
+      } else if ((rotationMode === 'winner_stays' || rotationMode === 'loser_stays') && validWinners.length > 0) {
+        const winnerSet = new Set(validWinners);
+        const winnerPlayers = courtPlayers.filter((p: any) => winnerSet.has(p.name));
+        const loserPlayers = courtPlayers.filter((p: any) => !winnerSet.has(p.name));
+        const alreadyInQueue = new Set(next.waiting_list.map((p: any) => p.name));
+        const uniqueWinners = winnerPlayers.filter((p: any) => !alreadyInQueue.has(p.name));
+        const uniqueLosers = loserPlayers.filter((p: any) => !alreadyInQueue.has(p.name));
+        if (rotationMode === 'winner_stays') {
+          next.waiting_list = [...uniqueWinners, ...next.waiting_list, ...uniqueLosers];
+        } else {
+          next.waiting_list = [...uniqueLosers, ...next.waiting_list, ...uniqueWinners];
+        }
+        delete next.court_occupants[cIdx];
       } else {
-        next.waiting_list = [...next.waiting_list, ...courtPlayers];
+        const alreadyInQueue = new Set(next.waiting_list.map((p: any) => p.name));
+        const uniquePlayers = courtPlayers.filter((p: any) => !alreadyInQueue.has(p.name));
+        next.waiting_list = [...next.waiting_list, ...uniquePlayers];
+        delete next.court_occupants[cIdx];
       }
-      delete next.court_occupants[cIdx];
       next.saved_queue = [...next.waiting_list];
       logEntries.push(`MATCH: ${getSportConfig(next.sport).court} ${parseInt(cIdx) + 1} finished. Winners: ${validWinners.join(', ') || 'none'}`);
       return { next, logs: logEntries, resetTimers: true };
@@ -505,36 +600,22 @@ export function useClubSession() {
       // Place players on court
       next.court_occupants = { ...next.court_occupants, [String(courtIdx)]: players };
       logEntries.push(`TOURNAMENT: Match started on court ${courtIdx + 1}`);
-      return { next, logs: logEntries };
-    }
-
-    if (action === 'tournament_super_game1') {
-      if (!req._fromHost) return null;
-      const { matchId, game1Scores } = payload;
-      if (!next.tournament) return null;
-      const t: Tournament = JSON.parse(JSON.stringify(next.tournament));
-      const mIdx = t.matches.findIndex((m: TournamentMatch) => m.id === matchId);
-      if (mIdx === -1 || t.matches[mIdx].game1Complete) return null;
-      const match = t.matches[mIdx];
-      const team1Players = t.teams.find(tm => tm.id === match.team1Id)?.players ?? [];
-      const team2Players = t.teams.find(tm => tm.id === match.team2Id)?.players ?? [];
-      // Use originalQueue for gender lookup (players removed from waiting_list during tournament)
-      const rosterLookup = [...(t.originalQueue ?? []), ...next.waiting_list];
-      let game2Team1 = team1Players;
-      let game2Team2 = team2Players;
-      if (t.swapTeams !== false) {
-        const mixed = isMixedTeam(team1Players, rosterLookup);
-        ({ game2Team1, game2Team2 } = computeGame2Teams(team1Players, team2Players, rosterLookup, mixed));
-      }
-      t.matches[mIdx] = { ...match, game1Scores, game1Complete: true, game2Team1, game2Team2, pendingScores: undefined };
-      next.tournament = t;
-      logEntries.push(`TOURNAMENT: Super game 1 recorded for match ${matchId}`);
-      return { next, logs: logEntries };
+      // Announce match
+      const tm1 = t.teams.find((tm: any) => tm.id === t.matches[mIdx].team1Id);
+      const tm2 = t.matches[mIdx].team2Id !== '__bye__'
+        ? t.teams.find((tm: any) => tm.id === t.matches[mIdx].team2Id)
+        : null;
+      const courtLabel = getSportConfig(next.sport).court;
+      const playerNames = (players as any[]).map((p: any) => p.name).join(', ');
+      const matchSpeech = tm2
+        ? `${courtLabel} ${courtIdx + 1}: ${tm1?.name ?? 'Team 1'} versus ${tm2?.name ?? 'Team 2'}. ${playerNames}, please make your way to ${courtLabel.toLowerCase()} ${courtIdx + 1}.`
+        : `${tm1?.name ?? 'Team 1'} has a bye on ${courtLabel.toLowerCase()} ${courtIdx + 1}.`;
+      return { next, logs: logEntries, speech: matchSpeech };
     }
 
     if (action === 'tournament_match_result') {
       if (!req._fromHost) return null;
-      const { matchId, winnerId, scoreA: tScoreA, scoreB: tScoreB, game2Scores } = payload;
+      const { matchId, winnerId, scoreA: tScoreA, scoreB: tScoreB } = payload;
       if (!next.tournament) return null;
       const t: Tournament = JSON.parse(JSON.stringify(next.tournament));
       const mIdx = t.matches.findIndex((m: TournamentMatch) => m.id === matchId);
@@ -542,27 +623,54 @@ export function useClubSession() {
       const match = t.matches[mIdx];
 
       if (t.format === 'super') {
-        // Super mode: record game 2 scores and close match
+        // Super mode: accept combinedScores (new simplified flow)
+        const combinedScores = payload.combinedScores as Record<string, number> | undefined;
+
+        // Compute game2 team compositions now (needed for team update + partnership tracking)
+        const team1Players = t.teams.find((tm: any) => tm.id === match.team1Id)?.players ?? [];
+        const team2Players = t.teams.find((tm: any) => tm.id === match.team2Id)?.players ?? [];
+        let finalGame2Team1 = match.game2Team1 ?? team1Players;
+        let finalGame2Team2 = match.game2Team2 ?? team2Players;
+        if (t.swapTeams !== false && !match.game2Team1) {
+          const rosterLookup = [...(t.originalQueue ?? []), ...next.waiting_list];
+          const mixed = isMixedTeam(team1Players, rosterLookup);
+          ({ game2Team1: finalGame2Team1, game2Team2: finalGame2Team2 } =
+            computeGame2Teams(team1Players, team2Players, rosterLookup, mixed));
+        }
+
         t.matches[mIdx] = {
           ...match,
-          game2Scores,
+          combinedScores,
+          game2Team1: finalGame2Team1,
+          game2Team2: finalGame2Team2,
           winnerId: '__super__',
           timestamp: new Date().toISOString(),
           courtIdx: undefined,
           pendingScores: undefined,
         };
-        // Update team compositions so future matches use the swapped lineup (only if swapTeams)
+
+        // Track partnerships (game1 pairs + game2 pairs)
+        const newPairs = [
+          ...teamsPartnerships(team1Players, team2Players),
+          ...teamsPartnerships(finalGame2Team1, finalGame2Team2),
+        ];
+        const existingPairs = new Set(t.partnerships ?? []);
+        newPairs.forEach(p => existingPairs.add(p));
+        t.partnerships = [...existingPairs];
+
+        // Update team compositions so future matches use swapped lineup
         if (t.swapTeams !== false) {
           const team1Obj = t.teams.find((tm: any) => tm.id === match.team1Id);
           const team2Obj = t.teams.find((tm: any) => tm.id === match.team2Id);
-          if (team1Obj && match.game2Team1?.length) team1Obj.players = match.game2Team1;
-          if (team2Obj && match.game2Team2?.length) team2Obj.players = match.game2Team2;
+          if (team1Obj && finalGame2Team1.length) team1Obj.players = finalGame2Team1;
+          if (team2Obj && finalGame2Team2.length) team2Obj.players = finalGame2Team2;
         }
+
         t.superPlayerScores = recalcSuperScores(t.matches);
-        const allDone = t.matches.every(m => m.winnerId !== null);
+        const allDone = t.matches.every((m: any) => m.winnerId !== null);
         if (allDone) {
           t.state = 'completed';
-          const sorted = Object.entries(t.superPlayerScores).sort(([, a], [, b]) => b - a);
+          const sorted = Object.entries(t.superPlayerScores).sort(([, a], [, b]) => (b as number) - (a as number));
           t.champion = sorted[0]?.[0] ?? undefined;
         }
       } else {
@@ -604,7 +712,39 @@ export function useClubSession() {
 
       next.tournament = t;
       logEntries.push(`TOURNAMENT: Match ${matchId} result recorded`);
-      return { next, logs: logEntries };
+
+      // Build speech: announce result and next available match
+      let resultSpeech = '';
+      if (t.state === 'completed') {
+        resultSpeech = 'Tournament complete!';
+      } else {
+        // Find next available match (teams not currently on any court)
+        const busyNames = new Set<string>(
+          Object.values(next.court_occupants).flatMap((ps: any[]) => ps.map((p: any) => p.name)),
+        );
+        const busyIds = new Set<string>();
+        t.teams.forEach((tm: any) => {
+          if (tm.players.some((n: string) => busyNames.has(n))) busyIds.add(tm.id);
+        });
+        const nextM = t.matches.find((m: any) =>
+          m.winnerId === null &&
+          m.courtIdx == null &&
+          !busyIds.has(m.team1Id) &&
+          (m.team2Id === '__bye__' || !busyIds.has(m.team2Id)),
+        );
+        if (nextM) {
+          const nt1 = t.teams.find((tm: any) => tm.id === nextM.team1Id);
+          const nt2 = nextM.team2Id !== '__bye__'
+            ? t.teams.find((tm: any) => tm.id === nextM.team2Id)
+            : null;
+          const t1p = nt1?.players.join(', ') ?? '';
+          const t2p = nt2?.players.join(', ') ?? '';
+          resultSpeech = nt2
+            ? `Next up: ${nt1?.name ?? 'Team 1'} versus ${nt2?.name ?? 'Team 2'}. ${t1p} and ${t2p}, please get ready.`
+            : `${nt1?.name ?? 'Team'} is next with a bye.`;
+        }
+      }
+      return { next, logs: logEntries, ...(resultSpeech ? { speech: resultSpeech } : {}) };
     }
 
     return { next, logs: logEntries };
@@ -628,12 +768,29 @@ export function useClubSession() {
       const name = sanitiseName(req.payload?.name || '');
       if (name) guestHeartbeatsRef.current[name] = Date.now();
     }
+    if (req.action === 'start_match') {
+      const cIdx = req.payload?.courtIdx?.toString();
+      const players: any[] = req.payload?.players || [];
+      if (cIdx && players.length) {
+        setCourtServe(prev => ({ ...prev, [cIdx]: players[0]?.name ?? '' }));
+      }
+    }
     if (req.action === 'finish_match') {
+      const cIdx = req.payload?.courtIdx?.toString();
+      if (cIdx) setCourtServe(prev => { const n = { ...prev }; delete n[cIdx]; return n; });
       const returning: any[] = req.payload?.returningPlayers || [];
       const now = Date.now();
       returning.forEach((p: any) => {
         const name = sanitiseName(p.name || '');
         if (name) guestHeartbeatsRef.current[name] = now;
+      });
+    }
+    if (req.action === 'tournament_end') {
+      // Clear heartbeats for all restored tournament players so the inactivity
+      // check doesn't remove them immediately after they return to the queue.
+      (prevClub.tournament?.originalQueue ?? []).forEach((p: any) => {
+        const name = sanitiseName(p.name || '');
+        if (name) delete guestHeartbeatsRef.current[name];
       });
     }
 
@@ -717,7 +874,7 @@ export function useClubSession() {
     const limit = club.pick_limit || 20;
     const eligible = (club.waiting_list || [])
       .map((p: any, i: number) => ({ ...p, queueIdx: i }))
-      .filter((p: any, i: number) => !p.isResting && i < limit);
+      .filter((p: any, i: number) => !p.isResting && !p.skipNext && i < limit);
 
     if (eligible.length < playersPerGame) { Alert.alert('Notice', `Not enough active players in range (need ${playersPerGame}).`); return undefined; }
 
@@ -913,11 +1070,9 @@ export function useClubSession() {
           });
 
         if (isActuallyHost) {
-          const seedNow = Date.now();
-          (data.waiting_list || []).forEach((w: any) => {
-            guestHeartbeatsRef.current[w.name] = seedNow;
-          });
-
+          // Do NOT seed heartbeats for existing queue players — host-added players
+          // never send heartbeats and would be auto-removed after 2 minutes.
+          // Only actual connected guests set their own heartbeat entries (via processRequest 'heartbeat').
           supabase
             .channel('req-sync')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'requests', filter: `club_id=eq.${cid}` },
@@ -973,9 +1128,19 @@ export function useClubSession() {
       const c = clubRef.current;
 
       const now = Date.now();
-      if (c && now - lastInactiveCheckRef.current > 60_000) {
+      if (c && !c.tournament && now - lastInactiveCheckRef.current > 60_000) {
         lastInactiveCheckRef.current = now;
+        // Auto-remove players whose leavingAt time has passed
+        const leavingNow = (c.waiting_list || []).filter((w: any) => w.leavingAt && now >= w.leavingAt);
+        if (leavingNow.length > 0) {
+          const leavingNames = new Set(leavingNow.map((w: any) => w.name));
+          leavingNow.forEach((w: any) => addLog(`AUTO: ${w.name} auto-removed — leaving time reached.`));
+          const listAfterLeave = (c.waiting_list || []).filter((w: any) => !leavingNames.has(w.name));
+          setClub((prev: any) => ({ ...prev, waiting_list: listAfterLeave }));
+          supabase.from('clubs').update({ waiting_list: listAfterLeave }).eq('id', cidRef.current).then();
+        }
         const stale = (c.waiting_list || []).filter((w: any) => {
+          if (w.leavingAt && now >= w.leavingAt) return false; // already handled above
           const hb = guestHeartbeatsRef.current[w.name];
           if (!hb) return false;
           const onCourt = Object.values(c.court_occupants || {}).flat().some((p: any) => p.name === w.name);
@@ -1106,6 +1271,9 @@ export function useClubSession() {
     playChime,
     shareSessionStats,
     exportStats,
+
+    // Serve rotation (host-side, not synced)
+    courtServe,
 
     // Core actions
     processRequest,

@@ -4,8 +4,9 @@ import {
   TouchableOpacity, View,
 } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
-import { Club } from '../../types';
+import { Club, SessionTemplate } from '../../types';
 import { SPORTS } from '../../constants/sports';
+import { getSportConfig } from '../../constants/sports';
 import { makeStyles } from './dashboardStyles';
 
 export interface TempSettings {
@@ -25,8 +26,12 @@ export interface TempSettings {
   clubPassword: string;
   soundEnabled: boolean;
   powerGuestEnabled: boolean;
-  rotationMode: 'standard' | 'winner_stays' | 'loser_stays';
+  rotationMode: 'standard' | 'winner_stays' | 'loser_stays' | 'challenger';
   targetGameDuration: number; // minutes, 0 = disabled
+  scoreCap: number;           // e.g. 21, 0 = disabled
+  playersPerGame: number;     // 0 = use sport default
+  eloEnabled: boolean;        // track ELO ratings
+  courtNames: Record<string, string>; // custom label per court index
 }
 
 export const DEFAULT_TEMP_SETTINGS: TempSettings = {
@@ -48,6 +53,10 @@ export const DEFAULT_TEMP_SETTINGS: TempSettings = {
   powerGuestEnabled: false,
   rotationMode: 'standard',
   targetGameDuration: 0,
+  scoreCap: 0,
+  playersPerGame: 0,
+  eloEnabled: false,
+  courtNames: {},
 };
 
 interface SettingsModalProps {
@@ -81,6 +90,14 @@ interface SettingsModalProps {
   onShowSetupGuide: () => void;
   onShowTournament: () => void;
   tournamentActive: boolean;
+  isEmailHost: boolean;
+  onCreateNewClub: (sport: string) => void;
+  hostClubs?: { id: string; club_name: string | null; sport: string | null }[];
+  onSwitchToClub?: (clubId: string) => void;
+  sessionTemplates: SessionTemplate[];
+  onSaveTemplate: (name: string) => void;
+  onLoadTemplate: (t: SessionTemplate) => void;
+  onDeleteTemplate: (id: string) => void;
 }
 
 export function SettingsModal({
@@ -112,16 +129,27 @@ export function SettingsModal({
   onShowSetupGuide,
   onShowTournament,
   tournamentActive,
+  isEmailHost,
+  onCreateNewClub,
+  hostClubs,
+  onSwitchToClub,
+  sessionTemplates,
+  onSaveTemplate,
+  onLoadTemplate,
+  onDeleteTemplate,
 }: SettingsModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [sessionCost, setSessionCost] = useState('');
+  const [newClubSportPrompt, setNewClubSportPrompt] = useState<string | null>(null);
+  const [newTemplateName, setNewTemplateName] = useState('');
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   const set = <K extends keyof TempSettings>(key: K, val: TempSettings[K]) =>
     setTempSettings(prev => ({ ...prev, [key]: val }));
 
   return (
-    <Modal visible={visible} animationType="fade" transparent>
+    <Modal visible={visible} animationType="fade" transparent onDismiss={() => setNewClubSportPrompt(null)}>
       <View style={styles.modalOverlay}>
         <ScrollView>
           <View style={[styles.modalContent, { marginVertical: 20 }]}>
@@ -153,11 +181,18 @@ export function SettingsModal({
             </TouchableOpacity>
 
             <Text style={styles.sectionHeader}>SPORT</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
               {(Object.entries(SPORTS) as [string, { label: string; emoji: string }][]).map(([key, s]) => (
                 <TouchableOpacity
                   key={key}
-                  onPress={() => set('sport', key)}
+                  onPress={() => {
+                    set('sport', key);
+                    if (isEmailHost && key !== club.sport) {
+                      setNewClubSportPrompt(key);
+                    } else {
+                      setNewClubSportPrompt(null);
+                    }
+                  }}
                   style={[styles.sportChip, tempSettings.sport === key && styles.sportChipActive]}
                 >
                   <Text style={{ fontSize: 18 }}>{s.emoji}</Text>
@@ -165,6 +200,52 @@ export function SettingsModal({
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            {newClubSportPrompt && (() => {
+              const existingClub = hostClubs?.find(c => c.sport === newClubSportPrompt && c.id !== club.id);
+              return (
+                <View style={{ backgroundColor: colors.selectedBg, borderRadius: 8, padding: 10, marginBottom: 12 }}>
+                  {existingClub ? (
+                    <>
+                      <Text style={{ color: colors.white, fontSize: 12, marginBottom: 8 }}>
+                        You already have a {newClubSportPrompt} club: <Text style={{ fontWeight: 'bold' }}>{existingClub.club_name || `My ${newClubSportPrompt} Club`}</Text>
+                      </Text>
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => { setNewClubSportPrompt(null); onSwitchToClub?.(existingClub.id); }}
+                          style={{ flex: 1, backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: colors.black, fontWeight: 'bold', fontSize: 12 }}>SWITCH TO IT</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => { setNewClubSportPrompt(null); onCreateNewClub(newClubSportPrompt); }}
+                          style={{ flex: 1, backgroundColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6, alignItems: 'center' }}
+                        >
+                          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 12 }}>CREATE NEW</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => setNewClubSportPrompt(null)}>
+                          <Text style={{ color: colors.gray3, fontSize: 18 }}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  ) : (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Text style={{ flex: 1, color: colors.white, fontSize: 12 }}>
+                        Create a new {newClubSportPrompt} club?
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => { setNewClubSportPrompt(null); onCreateNewClub(newClubSportPrompt); }}
+                        style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
+                      >
+                        <Text style={{ color: colors.black, fontWeight: 'bold', fontSize: 12 }}>CREATE</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setNewClubSportPrompt(null)}>
+                        <Text style={{ color: colors.gray3, fontSize: 18 }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
 
             <Text style={styles.sectionHeader}>CLUB</Text>
             <Text style={styles.label}>Club Name</Text>
@@ -225,9 +306,10 @@ export function SettingsModal({
             <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 8 }}>How players return to the queue after a match</Text>
             {(
               [
-                { key: 'standard', label: 'Standard', sub: 'All players go to the back of the queue' },
-                { key: 'winner_stays', label: 'Winner Stays', sub: 'Winners jump to the front — play again next' },
-                { key: 'loser_stays', label: 'Loser Stays', sub: 'Losers jump to the front — play again next' },
+                { key: 'standard',     label: 'Standard',         sub: 'All players go to the back of the queue' },
+                { key: 'winner_stays', label: 'Winner Stays',     sub: 'Winners jump to the front — play again next' },
+                { key: 'loser_stays',  label: 'Loser Stays',      sub: 'Losers jump to the front — play again next' },
+                { key: 'challenger',   label: 'Challenger Queue',  sub: 'Winners stay on court; next players in queue challenge them' },
               ] as const
             ).map(opt => (
               <TouchableOpacity
@@ -242,6 +324,157 @@ export function SettingsModal({
                 <View style={{ width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: tempSettings.rotationMode === opt.key ? colors.primary : colors.border, backgroundColor: tempSettings.rotationMode === opt.key ? colors.primary : 'transparent' }} />
               </TouchableOpacity>
             ))}
+
+            {/* Singles / Doubles toggle — shown only for sports that support it */}
+            {(() => {
+              const sportCfg = getSportConfig(tempSettings.sport);
+              if (!sportCfg.supportsDoublesToggle) return null;
+              const defaultPpg = sportCfg.playersPerGame;
+              // For tennis (default 4): singles = 2, doubles = 4
+              // For tableTennis (default 2): singles = 2, doubles = 4
+              const singlesCount = 2;
+              const doublesCount = defaultPpg === 2 ? 4 : defaultPpg;
+              const isDoubles = tempSettings.playersPerGame === 0
+                ? defaultPpg === doublesCount
+                : tempSettings.playersPerGame === doublesCount;
+              return (
+                <View style={[styles.settingsRow, { marginTop: 12 }]}>
+                  <View style={{ flex: 1, marginRight: 10 }}>
+                    <Text style={{ color: colors.white }}>Singles / Doubles</Text>
+                    <Text style={{ color: colors.gray3, fontSize: 11 }}>
+                      {isDoubles ? `Doubles — ${doublesCount} players per court` : `Singles — ${singlesCount} players per court`}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    <TouchableOpacity
+                      onPress={() => set('playersPerGame', singlesCount)}
+                      style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: !isDoubles ? colors.primary : colors.border }}
+                    >
+                      <Text style={{ color: !isDoubles ? colors.bg : colors.gray2, fontWeight: 'bold', fontSize: 12 }}>Singles</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => set('playersPerGame', doublesCount)}
+                      style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6, backgroundColor: isDoubles ? colors.primary : colors.border }}
+                    >
+                      <Text style={{ color: isDoubles ? colors.bg : colors.gray2, fontWeight: 'bold', fontSize: 12 }}>Doubles</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              );
+            })()}
+
+            <Text style={styles.sectionHeader}>WIN CONDITION</Text>
+            <View style={styles.settingsRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ color: colors.white }}>Score Cap</Text>
+                <Text style={{ color: colors.gray3, fontSize: 11 }}>
+                  {tempSettings.scoreCap === 0 ? 'Disabled — no target score' : `First to ${tempSettings.scoreCap} wins`}
+                </Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity onPress={() => set('scoreCap', Math.max(0, tempSettings.scoreCap - 1))} style={styles.mathBtn}><Text style={{ color: colors.white }}>-</Text></TouchableOpacity>
+                <Text style={{ color: colors.primary, marginHorizontal: 12, fontWeight: 'bold', minWidth: 34, textAlign: 'center' }}>
+                  {tempSettings.scoreCap === 0 ? 'OFF' : `${tempSettings.scoreCap}`}
+                </Text>
+                <TouchableOpacity onPress={() => set('scoreCap', tempSettings.scoreCap + 1)} style={styles.mathBtn}><Text style={{ color: colors.white }}>+</Text></TouchableOpacity>
+              </View>
+            </View>
+            {/* Quick-set common score caps */}
+            <View style={{ flexDirection: 'row', gap: 6, marginBottom: 12 }}>
+              {[0, 11, 15, 21, 25].map(cap => (
+                <TouchableOpacity
+                  key={cap}
+                  onPress={() => set('scoreCap', cap)}
+                  style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: tempSettings.scoreCap === cap ? colors.primary : colors.border }}
+                >
+                  <Text style={{ color: tempSettings.scoreCap === cap ? colors.bg : colors.gray2, fontSize: 11, fontWeight: 'bold' }}>{cap === 0 ? 'Off' : cap}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.sectionHeader}>ELO RATINGS</Text>
+            <View style={styles.settingsRow}>
+              <View style={{ flex: 1, marginRight: 10 }}>
+                <Text style={{ color: colors.white }}>Track ELO Ratings</Text>
+                <Text style={{ color: colors.gray3, fontSize: 11 }}>
+                  {tempSettings.eloEnabled
+                    ? 'ELO updates after each match with declared winners'
+                    : 'Disabled — enable to rank players by skill over time'}
+                </Text>
+              </View>
+              <Switch value={tempSettings.eloEnabled} onValueChange={v => set('eloEnabled', v)} thumbColor={tempSettings.eloEnabled ? colors.primary : colors.gray3} trackColor={{ true: colors.purple, false: colors.border }} />
+            </View>
+            {tempSettings.eloEnabled && (
+              <View style={{ backgroundColor: colors.selectedBg, borderRadius: 8, padding: 10, marginBottom: 10 }}>
+                <Text style={{ color: colors.gray3, fontSize: 11 }}>Starting ELO: 1000 · K-factor: 32 · Minimum: 100</Text>
+                <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 3 }}>ELO is shown in the Leaderboard sorted by rating.</Text>
+              </View>
+            )}
+
+            <Text style={styles.sectionHeader}>COURT NAMES</Text>
+            <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 8 }}>Custom labels shown on court cards (leave blank for default)</Text>
+            {Array.from({ length: tempSettings.courts }, (_, i) => (
+              <View key={i} style={[styles.settingsRow, { marginBottom: 6 }]}>
+                <Text style={{ color: colors.white, width: 70, fontSize: 13 }}>Court {i + 1}</Text>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0, fontSize: 13 }]}
+                  value={tempSettings.courtNames[i.toString()] ?? ''}
+                  onChangeText={v => set('courtNames', { ...tempSettings.courtNames, [i.toString()]: v })}
+                  placeholder={`Court ${i + 1}`}
+                  placeholderTextColor={colors.gray3}
+                  maxLength={20}
+                />
+              </View>
+            ))}
+
+            <Text style={styles.sectionHeader}>SESSION TEMPLATES</Text>
+            <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 8 }}>Save and reload full session configurations</Text>
+            {sessionTemplates.length > 0 && sessionTemplates.map(t => (
+              <View key={t.id} style={[styles.settingsRow, { backgroundColor: colors.selectedBg, borderRadius: 8, paddingHorizontal: 10, marginBottom: 4 }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>{t.name}</Text>
+                  <Text style={{ color: colors.gray3, fontSize: 11 }}>{t.sport} · {t.courts} courts · {t.rotationMode}{t.scoreCap ? ` · cap ${t.scoreCap}` : ''}</Text>
+                </View>
+                <TouchableOpacity
+                  onPress={() => onLoadTemplate(t)}
+                  style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5, marginRight: 6 }}
+                >
+                  <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 11 }}>LOAD</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => onDeleteTemplate(t.id)}>
+                  <Text style={{ color: colors.red, fontSize: 16 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+            {showSaveTemplate ? (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                  value={newTemplateName}
+                  onChangeText={setNewTemplateName}
+                  placeholder="Template name..."
+                  placeholderTextColor={colors.gray3}
+                  autoFocus
+                  maxLength={30}
+                />
+                <TouchableOpacity
+                  onPress={() => { if (newTemplateName.trim()) { onSaveTemplate(newTemplateName.trim()); setNewTemplateName(''); setShowSaveTemplate(false); } }}
+                  style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, justifyContent: 'center' }}
+                >
+                  <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 12 }}>SAVE</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowSaveTemplate(false)} style={{ justifyContent: 'center', paddingHorizontal: 6 }}>
+                  <Text style={{ color: colors.gray2, fontSize: 14 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                onPress={() => setShowSaveTemplate(true)}
+                style={{ paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.border, borderRadius: 6, alignSelf: 'flex-start', marginTop: 4 }}
+              >
+                <Text style={{ color: colors.gray2, fontWeight: 'bold', fontSize: 12 }}>+ SAVE CURRENT AS TEMPLATE</Text>
+              </TouchableOpacity>
+            )}
 
             <Text style={styles.sectionHeader}>GAME TIMER</Text>
             <View style={styles.settingsRow}>

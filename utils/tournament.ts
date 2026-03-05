@@ -192,8 +192,45 @@ export function recalcSuperScores(matches: TournamentMatch[]): Record<string, nu
         totals[name] = (totals[name] ?? 0) + pts;
       }
     };
-    addScores(m.game1Scores);
-    addScores(m.game2Scores);
+    if (m.combinedScores) {
+      addScores(m.combinedScores); // simplified single-entry flow
+    } else {
+      addScores(m.game1Scores);
+      addScores(m.game2Scores);
+    }
   }
   return totals;
+}
+
+// ── Partnership helpers ───────────────────────────────────────────────────────
+
+/** Canonical sorted key for a pair of players */
+export function pairKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+/** All within-team pair keys for two teams */
+export function teamsPartnerships(t1: string[], t2: string[]): string[] {
+  const pairs: string[] = [];
+  for (let i = 0; i < t1.length; i++)
+    for (let j = i + 1; j < t1.length; j++) pairs.push(pairKey(t1[i], t1[j]));
+  for (let i = 0; i < t2.length; i++)
+    for (let j = i + 1; j < t2.length; j++) pairs.push(pairKey(t2[i], t2[j]));
+  return pairs;
+}
+
+/**
+ * Count how many players in a pending match have already been team-mates.
+ * Lower = better (fewer repeat partnerships).
+ */
+export function matchPartnershipScore(
+  match: TournamentMatch,
+  teams: TournamentTeam[],
+  partnerships: string[],
+): number {
+  const team1 = teams.find(t => t.id === match.team1Id);
+  const team2 = match.team2Id === '__bye__' ? null : teams.find(t => t.id === match.team2Id);
+  if (!team1 || !team2) return 0;
+  const pset = new Set(partnerships);
+  return teamsPartnerships(team1.players, team2.players).filter(p => pset.has(p)).length;
 }

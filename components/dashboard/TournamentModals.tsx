@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { ColorSet, useTheme } from '../../contexts/theme-context';
 import { QueuePlayer, Tournament, TournamentMatch, TournamentTeam } from '../../types';
-import { autoFormTeams, generateKnockoutRound, generateRoundRobinFixtures, isMixedTeam } from '../../utils/tournament';
+import { autoFormTeams, computeGame2Teams, generateKnockoutRound, generateRoundRobinFixtures, isMixedTeam } from '../../utils/tournament';
 
 const makeStyles = (C: ColorSet) =>
   StyleSheet.create({
@@ -236,8 +236,7 @@ export function TournamentSetupModal({
       {format === 'super' && (
         <View style={styles.infoBanner}>
           <Text style={styles.infoText}>
-            🔄 2 mini-games per fixture. Teams swap partners at half time.
-            Individual points build the league table.
+            2 mini-games per fixture. Individual points build the league table.
           </Text>
         </View>
       )}
@@ -290,12 +289,11 @@ export function TournamentSetupModal({
           trackColor={{ true: colors.purple, false: colors.border }}
         />
       </View>
-
       {format === 'super' && (
         <View style={styles.row}>
           <View style={{ flex: 1, marginRight: 10 }}>
-            <Text style={styles.label}>Swap Teams at Half Time</Text>
-            <Text style={styles.sublabel}>Players switch partners after game 1. Disable to keep original teams both games.</Text>
+            <Text style={styles.label}>Swap Partners at Half Time</Text>
+            <Text style={styles.sublabel}>Players switch team-mates after game 1. Off = same pairs both games.</Text>
           </View>
           <Switch
             value={swapTeams}
@@ -305,6 +303,7 @@ export function TournamentSetupModal({
           />
         </View>
       )}
+
 
       {notEnoughPlayers && (
         <Text style={{ color: colors.red, textAlign: 'center', fontSize: 12, marginTop: 10 }}>
@@ -453,10 +452,12 @@ export interface TournamentResultModalProps {
   match: TournamentMatch | null;
   teams: TournamentTeam[];
   format: 'round_robin' | 'knockout' | 'super';
-  waitingList: QueuePlayer[];
+  /** Combined roster for gender lookup (originalQueue + waiting_list) */
+  roster: QueuePlayer[];
+  swapTeams?: boolean;
   onConfirmStandard: (winnerId: string, scoreA?: number, scoreB?: number) => void;
-  onConfirmSuperGame1: (scores: Record<string, number>) => void;
-  onConfirmSuperGame2: (scores: Record<string, number>) => void;
+  /** Super mode: combined per-player scores across both games */
+  onConfirmSuper: (scores: Record<string, number>) => void;
   onCancel: () => void;
 }
 
@@ -465,10 +466,10 @@ export function TournamentResultModal({
   match,
   teams,
   format,
-  waitingList,
+  roster,
+  swapTeams = true,
   onConfirmStandard,
-  onConfirmSuperGame1,
-  onConfirmSuperGame2,
+  onConfirmSuper,
   onCancel,
 }: TournamentResultModalProps) {
   const { colors } = useTheme();
@@ -488,49 +489,31 @@ export function TournamentResultModal({
   const team1 = match ? teamLookup[match.team1Id] : null;
   const team2 = match && match.team2Id !== '__bye__' ? teamLookup[match.team2Id] : null;
 
+  // Compute game 2 team compositions (swap) for display
+  const { game2Team1, game2Team2 } = useMemo(() => {
+    if (format !== 'super' || !swapTeams || !team1 || !team2) {
+      return { game2Team1: team1?.players ?? [], game2Team2: team2?.players ?? [] };
+    }
+    const mixed = isMixedTeam(team1.players, roster);
+    return computeGame2Teams(team1.players, team2.players, roster, mixed);
+  }, [format, swapTeams, team1, team2, roster]);
+
   useEffect(() => {
     if (visible) {
       setSelectedWinner(null);
       setScoreA('');
       setScoreB('');
-      // Pre-fill any scores players have already self-submitted
-      const pre: Record<string, string> = {};
-      if (match?.pendingScores) {
-        Object.entries(match.pendingScores).forEach(([name, score]) => {
-          pre[name] = String(score);
-        });
-      }
-      setPlayerScores(pre);
+      setPlayerScores({});
     }
   }, [visible, match?.id]);
 
-  // Determine current game players for super mode
-  const isGame2 = format === 'super' && match?.game1Complete;
-  const superPlayers: string[] = useMemo(() => {
-    if (format !== 'super' || !match) return [];
-    if (isGame2) {
-      return [...(match.game2Team1 ?? []), ...(match.game2Team2 ?? [])];
-    }
-    return [...(team1?.players ?? []), ...(team2?.players ?? [])];
-  }, [format, match, isGame2, team1, team2]);
+  // All 4 players for combined score entry
+  const allPlayers: string[] = useMemo(() => {
+    if (format !== 'super' || !team1 || !team2) return [];
+    return [...team1.players, ...team2.players];
+  }, [format, team1, team2]);
 
-  const isMixed = format === 'super' && match && !isGame2
-    ? isMixedTeam(team1?.players ?? [], waitingList)
-    : false;
-
-  const handleSuperConfirm = () => {
-    const scores: Record<string, number> = {};
-    superPlayers.forEach(name => {
-      scores[name] = parseInt(playerScores[name] ?? '0', 10) || 0;
-    });
-    if (isGame2) {
-      onConfirmSuperGame2(scores);
-    } else {
-      onConfirmSuperGame1(scores);
-    }
-  };
-
-  const canConfirmSuper = superPlayers.every(
+  const canConfirmSuper = allPlayers.every(
     name => playerScores[name] !== undefined && playerScores[name].trim() !== '',
   );
 
@@ -538,66 +521,79 @@ export function TournamentResultModal({
 
   // ── Super mode ──
   if (format === 'super') {
-    const game2t1 = match.game2Team1 ?? [];
-    const game2t2 = match.game2Team2 ?? [];
-    const currentT1Players = isGame2 ? game2t1 : (team1?.players ?? []);
-    const currentT2Players = isGame2 ? game2t2 : (team2?.players ?? []);
-
-    // Flat ordered list: all players with their side label
-    const allSidedPlayers: { name: string; side: string }[] = [
-      ...currentT1Players.map(name => ({ name, side: team1?.name ?? 'Side A' })),
-      ...currentT2Players.map(name => ({ name, side: team2?.name ?? 'Side B' })),
-    ];
-
     return (
       <Modal visible={visible} animationType="fade" transparent>
         <View style={styles.overlay}>
           <ScrollView>
             <View style={[styles.card, { marginVertical: 20 }]}>
-              <Text style={styles.title}>
-                {isGame2 ? '⚡ GAME 2 — PLAYER SCORES' : '🎮 GAME 1 — PLAYER SCORES'}
-              </Text>
-              <Text style={styles.sub}>Enter each player's individual points</Text>
+              <Text style={styles.title}>🏆 SUPER MATCH RESULT</Text>
+              <Text style={styles.sub}>Enter each player's combined points across both games</Text>
 
-              {isGame2 && (
-                <View style={styles.infoBanner}>
-                  <Text style={styles.infoText}>
-                    Teams swapped! {isMixed ? 'Females' : 'Alphabetically lowest players'} changed sides.
-                  </Text>
+              {/* Game compositions info */}
+              <View style={styles.infoBanner}>
+                <Text style={[styles.infoText, { fontWeight: 'bold', marginBottom: 4 }]}>
+                  GAME 1 — {team1?.name} vs {team2?.name}
+                </Text>
+                <Text style={styles.infoText}>
+                  {team1?.players.join(', ')}  ·  {team2?.players.join(', ')}
+                </Text>
+                {swapTeams && (
+                  <>
+                    <Text style={[styles.infoText, { fontWeight: 'bold', marginTop: 8, marginBottom: 4 }]}>
+                      GAME 2 — TEAMS SWAPPED
+                    </Text>
+                    <Text style={styles.infoText}>
+                      {game2Team1.join(', ')}  ·  {game2Team2.join(', ')}
+                    </Text>
+                  </>
+                )}
+              </View>
+
+              {/* Combined score entry — each player */}
+              <Text style={styles.sectionHeader}>{team1?.name} PLAYERS</Text>
+              {team1?.players.map(name => (
+                <View key={name} style={[styles.playerScoreRow, { marginBottom: 10 }]}>
+                  <Text style={[styles.playerScoreName, { fontSize: 14 }]}>{name}</Text>
+                  <TextInput
+                    style={[styles.scoreInput, { width: 72, flex: undefined }]}
+                    placeholder="pts"
+                    placeholderTextColor={colors.gray3}
+                    keyboardType="numeric"
+                    maxLength={3}
+                    value={playerScores[name] ?? ''}
+                    onChangeText={v => setPlayerScores(prev => ({ ...prev, [name]: v }))}
+                  />
                 </View>
-              )}
+              ))}
 
-              {allSidedPlayers.map(({ name, side }, idx) => {
-                const isFirstOfSide = idx === 0 || allSidedPlayers[idx - 1].side !== side;
-                return (
-                  <View key={name}>
-                    {isFirstOfSide && (
-                      <Text style={styles.sectionHeader}>{side}</Text>
-                    )}
-                    <View style={[styles.playerScoreRow, { marginBottom: 10 }]}>
-                      <Text style={[styles.playerScoreName, { fontSize: 14 }]}>{name}</Text>
-                      <TextInput
-                        style={[styles.scoreInput, { width: 72, flex: undefined }]}
-                        placeholder="pts"
-                        placeholderTextColor={colors.gray3}
-                        keyboardType="numeric"
-                        maxLength={3}
-                        value={playerScores[name] ?? ''}
-                        onChangeText={v => setPlayerScores(prev => ({ ...prev, [name]: v }))}
-                      />
-                    </View>
-                  </View>
-                );
-              })}
+              <Text style={styles.sectionHeader}>{team2?.name} PLAYERS</Text>
+              {team2?.players.map(name => (
+                <View key={name} style={[styles.playerScoreRow, { marginBottom: 10 }]}>
+                  <Text style={[styles.playerScoreName, { fontSize: 14 }]}>{name}</Text>
+                  <TextInput
+                    style={[styles.scoreInput, { width: 72, flex: undefined }]}
+                    placeholder="pts"
+                    placeholderTextColor={colors.gray3}
+                    keyboardType="numeric"
+                    maxLength={3}
+                    value={playerScores[name] ?? ''}
+                    onChangeText={v => setPlayerScores(prev => ({ ...prev, [name]: v }))}
+                  />
+                </View>
+              ))}
 
               <TouchableOpacity
                 style={[styles.btnPrimary, { marginTop: 8, opacity: canConfirmSuper ? 1 : 0.4 }]}
                 disabled={!canConfirmSuper}
-                onPress={handleSuperConfirm}
+                onPress={() => {
+                  const scores: Record<string, number> = {};
+                  allPlayers.forEach(name => {
+                    scores[name] = parseInt(playerScores[name] ?? '0', 10) || 0;
+                  });
+                  onConfirmSuper(scores);
+                }}
               >
-                <Text style={styles.btnText}>
-                  {isGame2 ? '✓ CONFIRM GAME 2 — FINISH MATCH' : '✓ CONFIRM GAME 1 — SWAP TEAMS'}
-                </Text>
+                <Text style={styles.btnText}>✓ CONFIRM — FINISH MATCH</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.btnSecondary} onPress={onCancel}>
                 <Text style={styles.btnSecondaryText}>CANCEL</Text>

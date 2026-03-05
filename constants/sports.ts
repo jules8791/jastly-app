@@ -1,14 +1,14 @@
 export const SPORTS = {
-  badminton:   { label: 'Badminton',    emoji: '🏸', court: 'Court', playersPerGame: 4 },
-  pickleball:  { label: 'Pickleball',   emoji: '🥒', court: 'Court', playersPerGame: 4 },
-  tennis:      { label: 'Tennis',       emoji: '🎾', court: 'Court', playersPerGame: 4 },
-  tableTennis: { label: 'Table Tennis', emoji: '🏓', court: 'Table', playersPerGame: 2 },
-  squash:      { label: 'Squash',       emoji: '🎾', court: 'Court', playersPerGame: 2 },
-  padel:       { label: 'Padel',        emoji: '🥒', court: 'Court', playersPerGame: 4 },
-  pool:        { label: 'Pool',         emoji: '🎱', court: 'Table', playersPerGame: 2 },
-  darts:       { label: 'Darts',        emoji: '🎯', court: 'Board', playersPerGame: 2 },
-  volleyball:  { label: 'Volleyball',   emoji: '🏐', court: 'Court', playersPerGame: 6 },
-  basketball:  { label: 'Basketball',   emoji: '🏀', court: 'Court', playersPerGame: 10 },
+  badminton:   { label: 'Badminton',    emoji: '🏸', court: 'Court', playersPerGame: 4, supportsDoublesToggle: false },
+  pickleball:  { label: 'Pickleball',   emoji: '🥒', court: 'Court', playersPerGame: 4, supportsDoublesToggle: false },
+  tennis:      { label: 'Tennis',       emoji: '🎾', court: 'Court', playersPerGame: 4, supportsDoublesToggle: true  },
+  tableTennis: { label: 'Table Tennis', emoji: '🏓', court: 'Table', playersPerGame: 2, supportsDoublesToggle: true  },
+  squash:      { label: 'Squash',       emoji: '🎾', court: 'Court', playersPerGame: 2, supportsDoublesToggle: false },
+  padel:       { label: 'Padel',        emoji: '🥒', court: 'Court', playersPerGame: 4, supportsDoublesToggle: false },
+  pool:        { label: 'Pool',         emoji: '🎱', court: 'Table', playersPerGame: 2, supportsDoublesToggle: false },
+  darts:       { label: 'Darts',        emoji: '🎯', court: 'Board', playersPerGame: 2, supportsDoublesToggle: false },
+  volleyball:  { label: 'Volleyball',   emoji: '🏐', court: 'Court', playersPerGame: 6, supportsDoublesToggle: false },
+  basketball:  { label: 'Basketball',   emoji: '🏀', court: 'Court', playersPerGame: 10, supportsDoublesToggle: false },
 } as const;
 
 export type SportKey = keyof typeof SPORTS;

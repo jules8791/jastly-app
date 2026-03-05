@@ -6,10 +6,26 @@
 -- Add sport column (safe to re-run)
 ALTER TABLE clubs ADD COLUMN IF NOT EXISTS sport TEXT DEFAULT 'badminton';
 
+-- Add tournament column (safe to re-run)
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS tournament JSONB;
+
+-- Add score cap and players-per-game override columns (safe to re-run)
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS score_cap INTEGER;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS players_per_game INTEGER;
+
+-- Add ELO rating toggle and custom court names (safe to re-run)
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS elo_enabled BOOLEAN DEFAULT false;
+ALTER TABLE clubs ADD COLUMN IF NOT EXISTS court_names JSONB;
+
 -- Add generated boolean so guests can check if a power-guest PIN is set
 -- without ever reading the actual hash
 ALTER TABLE clubs ADD COLUMN IF NOT EXISTS has_power_guest_pin BOOLEAN
   GENERATED ALWAYS AS (power_guest_pin IS NOT NULL) STORED;
+
+-- ────────────────────────────────────────────────────────────
+-- SECURITY: Drop clubs_public view (SECURITY DEFINER bypasses RLS)
+-- The app queries the clubs table directly; this view is unused.
+DROP VIEW IF EXISTS public.clubs_public;
 
 -- ────────────────────────────────────────────────────────────
 -- SECURITY: Revoke sensitive columns from unauthenticated users
@@ -20,19 +36,51 @@ ALTER TABLE clubs ADD COLUMN IF NOT EXISTS has_power_guest_pin BOOLEAN
 REVOKE SELECT (join_password, power_guest_pin) ON public.clubs FROM anon;
 
 -- Server-side password validation RPC (called by join.tsx)
+-- Accepts plaintext password and compares server-side so the stored hash
+-- is never exposed to the client. Handles both formats:
+--   Legacy:  SHA256("jastly::<password>::club")
+--   Salted:  "<salt>:SHA256(<salt>::<password>)"
+-- Empty p_password = probe call (returns requires_password without validating)
 -- Returns: { valid: bool, requires_password: bool }
-CREATE OR REPLACE FUNCTION public.validate_join_password(p_club_id TEXT, p_password_hash TEXT)
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Drop old signature first (parameter was renamed from p_password_hash → p_password)
+DROP FUNCTION IF EXISTS public.validate_join_password(TEXT, TEXT);
+
+CREATE OR REPLACE FUNCTION public.validate_join_password(p_club_id TEXT, p_password TEXT)
 RETURNS JSONB LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE v_club RECORD;
+DECLARE
+  v_stored   TEXT;
+  v_colon    INT;
+  v_salt     TEXT;
+  v_stored_h TEXT;
+  v_computed TEXT;
 BEGIN
-  SELECT join_password INTO v_club FROM clubs WHERE id = p_club_id;
+  SELECT join_password INTO v_stored FROM clubs WHERE id = p_club_id;
   IF NOT FOUND THEN
     RETURN jsonb_build_object('valid', false, 'error', 'Club not found');
   END IF;
-  IF v_club.join_password IS NULL THEN
+  IF v_stored IS NULL THEN
     RETURN jsonb_build_object('valid', true, 'requires_password', false);
   END IF;
-  RETURN jsonb_build_object('valid', v_club.join_password = p_password_hash, 'requires_password', true);
+  -- Empty password = just probing whether a password is required
+  IF p_password = '' THEN
+    RETURN jsonb_build_object('valid', false, 'requires_password', true);
+  END IF;
+
+  v_colon := position(':' IN v_stored);
+  IF v_colon > 0 THEN
+    -- Salted format: "salt:SHA256(salt + '::' + password)"
+    v_salt     := left(v_stored, v_colon - 1);
+    v_stored_h := substring(v_stored FROM v_colon + 1);
+    v_computed := encode(digest(v_salt || '::' || p_password, 'sha256'), 'hex');
+  ELSE
+    -- Legacy format: SHA256("jastly::password::club")
+    v_computed := encode(digest('jastly::' || p_password || '::club', 'sha256'), 'hex');
+    v_stored_h := v_stored;
+  END IF;
+
+  RETURN jsonb_build_object('valid', v_computed = v_stored_h, 'requires_password', true);
 END; $$;
 
 GRANT EXECUTE ON FUNCTION public.validate_join_password(TEXT, TEXT) TO anon, authenticated;
@@ -129,24 +177,32 @@ CREATE POLICY "club-logos: public read"
   ON storage.objects FOR SELECT
   USING (bucket_id = 'club-logos');
 
--- Any authenticated user (including anonymous host) can upload
+-- Only the authenticated uploader can insert a logo (owner is set automatically)
 DROP POLICY IF EXISTS "club-logos: auth upload"   ON storage.objects;
 CREATE POLICY "club-logos: auth upload"
   ON storage.objects FOR INSERT
   WITH CHECK (bucket_id = 'club-logos' AND auth.uid() IS NOT NULL);
 
--- Any authenticated user can replace (upsert) their logo
+-- Only the original uploader can replace their own logo (owner = auth.uid())
 DROP POLICY IF EXISTS "club-logos: auth update"   ON storage.objects;
 CREATE POLICY "club-logos: auth update"
   ON storage.objects FOR UPDATE
-  USING (bucket_id = 'club-logos' AND auth.uid() IS NOT NULL);
+  USING (bucket_id = 'club-logos' AND owner = auth.uid());
 
--- Any authenticated user can delete their logo
+-- Only the original uploader can delete their own logo
 DROP POLICY IF EXISTS "club-logos: auth delete"   ON storage.objects;
 CREATE POLICY "club-logos: auth delete"
   ON storage.objects FOR DELETE
-  USING (bucket_id = 'club-logos' AND auth.uid() IS NOT NULL);
+  USING (bucket_id = 'club-logos' AND owner = auth.uid());
 
+
+-- ────────────────────────────────────────────────────────────
+-- PERFORMANCE INDICES
+-- ────────────────────────────────────────────────────────────
+-- Speeds up host authentication checks and request polling
+CREATE INDEX IF NOT EXISTS idx_clubs_host_uid     ON clubs(host_uid);
+CREATE INDEX IF NOT EXISTS idx_requests_club_id   ON requests(club_id);
+CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at DESC);
 
 -- ────────────────────────────────────────────────────────────
 -- NOTES
@@ -158,3 +214,20 @@ CREATE POLICY "club-logos: auth delete"
 -- To test: open an incognito browser, use the Supabase REST API
 -- directly with the anon key and confirm you cannot UPDATE clubs
 -- or READ requests without being the host.
+--
+-- ── Supabase security advisor warnings (expected / false positives) ──────────
+--
+-- "auth_allow_anonymous_sign_ins" on clubs/requests:
+--   This app intentionally allows anonymous auth for hosts (signInAnonymously).
+--   The UPDATE/DELETE policies on clubs check auth.uid() = host_uid, so an
+--   anonymous session without the right UID has no access. These are false
+--   positives; the actual data protection is enforced by the UID check.
+--
+-- "auth_allow_anonymous_sign_ins" on storage.objects:
+--   The upload policy requires auth.uid() IS NOT NULL (any authenticated user).
+--   UPDATE and DELETE are now restricted to owner = auth.uid() (fixed above).
+--   Public read is intentional — logos are served via public CDN URLs.
+--
+-- "auth_leaked_password_protection":
+--   Enable this in the Supabase Dashboard only — there is no SQL for it.
+--   Dashboard → Authentication → Providers → Email → "Check for leaked passwords"

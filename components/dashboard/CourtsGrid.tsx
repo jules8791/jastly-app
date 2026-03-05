@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
 import { QueuePlayer } from '../../types';
 import { makeStyles } from './dashboardStyles';
+
+const SKILL_LABELS = ['', 'Beg', 'Nov', 'Int', 'Adv', 'Pro'];
 
 interface CourtsGridProps {
   activeCourts: number;
@@ -13,15 +15,26 @@ interface CourtsGridProps {
   isPowerGuest: boolean;
   isProcessingAction: boolean;
   courtStartTimes: React.MutableRefObject<Record<string, number>>;
+  targetGameDuration?: number; // minutes, 0 = off
+  courtNames?: Record<string, string>; // custom label per court index
+  courtServe?: Record<string, string>; // current server per court
   onFinishMatch: (courtIdx: string, players: QueuePlayer[]) => void;
   onSubstitute: (courtIdx: string, outPlayer: string) => void;
+  onAdvanceServe?: (courtIdx: string) => void;
 }
 
 function formatElapsed(startTime: number): string {
   const elapsed = Math.max(0, Math.floor((Date.now() - startTime) / 1000));
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatCountdown(startTime: number, targetMins: number): string {
+  const remainMs = Math.max(0, targetMins * 60_000 - (Date.now() - startTime));
+  const m = Math.floor(remainMs / 60_000);
+  const s = Math.floor((remainMs % 60_000) / 1000);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 export function CourtsGrid({
@@ -30,16 +43,16 @@ export function CourtsGrid({
   courtLabel,
   isHost,
   courtStartTimes,
+  targetGameDuration = 0,
+  courtNames,
+  courtServe,
   onFinishMatch,
   onSubstitute,
+  onAdvanceServe,
 }: CourtsGridProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const { width: screenWidth } = useWindowDimensions();
-  const [courtGridWidth, setCourtGridWidth] = useState(0);
-  // Tick every second to drive elapsed time re-renders
   const [, setTick] = useState(0);
-
   useEffect(() => {
     const interval = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(interval);
@@ -47,84 +60,111 @@ export function CourtsGrid({
 
   const numCourts = activeCourts || 4;
   const cardMargin = 4;
-  const gridW = courtGridWidth > 0 ? courtGridWidth : screenWidth;
-  const numCols = gridW > 900 ? 4 : gridW > 600 ? 3 : 2;
-  const cardWidth = Math.max(60, Math.floor((gridW - 2 * (numCols + 1) * cardMargin) / numCols));
-  const numRows = Math.ceil(numCourts / numCols);
-  const cardHeight = Math.max(80, Math.floor(260 / numRows));
-  const nameFontSize = Math.max(9, Math.min(Math.floor(cardWidth / 12), Math.floor(cardHeight / 6)));
-  const titleFontSize = Math.max(8, Math.min(Math.floor(cardWidth / 16), Math.floor(cardHeight / 8)));
-
-  const rows: number[][] = [];
-  for (let i = 0; i < numCourts; i += numCols) {
-    rows.push(Array.from({ length: numCols }, (_, j) => i + j).filter(n => n < numCourts));
-  }
 
   return (
     <View
       style={{ paddingHorizontal: cardMargin, paddingTop: cardMargin }}
-      onLayout={(e) => setCourtGridWidth(e.nativeEvent.layout.width)}
     >
-      {rows.map((row, ri) => (
-        <View key={ri} style={{ flexDirection: 'row', marginBottom: cardMargin }}>
-          {row.map(i => {
-            const players = courtOccupants?.[i.toString()];
-            const isBusy = !!players;
-            const startTime = courtStartTimes.current[i.toString()];
-            return (
-              <TouchableOpacity
-                key={i}
-                style={[{
-                  width: cardWidth,
-                  height: cardHeight,
-                  marginHorizontal: cardMargin,
-                  borderRadius: 8,
-                  borderWidth: 1,
-                  padding: 4,
-                  overflow: 'hidden',
-                }, isBusy ? styles.courtBusy : styles.courtFree]}
-                onPress={() => isBusy ? onFinishMatch(i.toString(), players) : undefined}
-              >
-                <Text style={[styles.courtTitle, { fontSize: titleFontSize }]} numberOfLines={1}>
-                  {courtLabel.toUpperCase()} {i + 1}
+      {Array.from({ length: numCourts }, (_, i) => {
+        const players = courtOccupants?.[i.toString()];
+        const isBusy = !!players;
+        const startTime = courtStartTimes.current[i.toString()];
+        const customName = courtNames?.[i.toString()];
+        const server = courtServe?.[i.toString()];
+        const elapsed = startTime ? formatElapsed(startTime) : null;
+        const overTime = targetGameDuration > 0 && startTime
+          ? (Date.now() - startTime) >= targetGameDuration * 60_000
+          : false;
+        const countdown = targetGameDuration > 0 && startTime
+          ? formatCountdown(startTime, targetGameDuration)
+          : null;
+
+        const team1 = isBusy ? [players[0], players[1]].filter(Boolean) : [];
+        const team2 = isBusy ? [players[2], players[3], players[4], players[5]].filter(Boolean) : [];
+
+        const renderPlayer = (p: QueuePlayer, pi: number) => (
+          <View key={pi} style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+            {server === p?.name && (
+              <Text style={{ fontSize: 10, color: colors.primary }}>→</Text>
+            )}
+            <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}
+              style={[styles.courtPlayer, { fontSize: 14 }]}>
+              {p?.name}
+            </Text>
+            {p?.skillLevel ? (
+              <Text style={{ fontSize: 10, color: colors.gray3 }}>
+                {SKILL_LABELS[p.skillLevel] || p.skillLevel}
+              </Text>
+            ) : null}
+          </View>
+        );
+
+        return (
+          <TouchableOpacity
+            key={i}
+            style={[{
+              marginHorizontal: cardMargin,
+              marginBottom: cardMargin,
+              borderRadius: 8,
+              borderWidth: 1,
+              padding: 8,
+              overflow: 'hidden',
+            }, isBusy ? styles.courtBusy : styles.courtFree]}
+            onPress={() => isBusy ? onFinishMatch(i.toString(), players) : undefined}
+          >
+            {/* Header row: court name + timer */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+              <Text style={[styles.courtTitle, { fontSize: 13 }]} numberOfLines={1}>
+                {customName || `${courtLabel.toUpperCase()} ${i + 1}`}
+              </Text>
+              {isBusy && elapsed && (
+                <Text style={{ color: overTime ? colors.red : colors.gray3, fontSize: 11 }}>
+                  {countdown !== null ? `${countdown} left` : elapsed}
+                  {overTime ? ' !' : ''}
                 </Text>
-                {isBusy ? (
-                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Text numberOfLines={1} style={[styles.courtPlayer, { fontSize: nameFontSize }]}>
-                      {players[0]?.name} & {players[1]?.name}
-                    </Text>
-                    <Text style={{ color: colors.gray2, fontSize: Math.max(8, titleFontSize - 1) }}>VS</Text>
-                    <Text numberOfLines={1} style={[styles.courtPlayer, { fontSize: nameFontSize }]}>
-                      {players[2]?.name} & {players[3]?.name}
-                    </Text>
-                    {startTime ? (
-                      <Text style={{ color: colors.gray3, fontSize: Math.max(8, titleFontSize - 1), marginTop: 2 }}>
-                        {'\u23F1'} {formatElapsed(startTime)}
-                      </Text>
-                    ) : null}
-                    {isHost && (
+              )}
+            </View>
+
+            {isBusy ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {/* Team 1 */}
+                <View style={{ flex: 1, alignItems: 'flex-start', gap: 2 }}>
+                  {team1.map((p, pi) => renderPlayer(p as QueuePlayer, pi))}
+                </View>
+
+                <Text style={{ color: colors.gray2, fontSize: 12, fontWeight: 'bold', marginHorizontal: 8 }}>VS</Text>
+
+                {/* Team 2 */}
+                <View style={{ flex: 1, alignItems: 'flex-end', gap: 2 }}>
+                  {team2.map((p, pi) => renderPlayer(p as QueuePlayer, pi))}
+                </View>
+
+                {/* Action buttons */}
+                {isHost && (
+                  <View style={{ flexDirection: 'column', gap: 4, marginLeft: 8 }}>
+                    <TouchableOpacity
+                      onPress={() => onSubstitute(i.toString(), players[0]?.name)}
+                      style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 }}
+                    >
+                      <Text style={{ color: colors.primary, fontSize: 11 }}>SUB</Text>
+                    </TouchableOpacity>
+                    {onAdvanceServe && (
                       <TouchableOpacity
-                        onPress={() => onSubstitute(i.toString(), players[0]?.name)}
-                        style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, marginTop: 2 }}
+                        onPress={() => onAdvanceServe(i.toString())}
+                        style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 3 }}
                       >
-                        <Text style={{ color: colors.primary, fontSize: Math.max(9, titleFontSize - 1) }}>SUB</Text>
+                        <Text style={{ color: colors.primary, fontSize: 11 }}>→SRV</Text>
                       </TouchableOpacity>
                     )}
                   </View>
-                ) : (
-                  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-                    <Text style={[styles.courtFreeText, { fontSize: nameFontSize + 2 }]}>FREE</Text>
-                  </View>
                 )}
-              </TouchableOpacity>
-            );
-          })}
-          {/* Phantom cards to keep short rows left-aligned */}
-          {row.length < numCols && Array.from({ length: numCols - row.length }).map((_, idx) => (
-            <View key={`ph-${idx}`} style={{ width: cardWidth, marginHorizontal: cardMargin }} />
-          ))}
-        </View>
-      ))}
+              </View>
+            ) : (
+              <Text style={[styles.courtFreeText, { fontSize: 14 }]}>FREE</Text>
+            )}
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }

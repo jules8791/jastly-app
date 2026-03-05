@@ -3,6 +3,8 @@ export interface Player {
   gender: 'M' | 'F';
   games: number;
   wins: number;
+  skillLevel?: number; // 1–5
+  elo?: number;        // ELO rating, default 1000
 }
 
 export interface QueuePlayer {
@@ -11,6 +13,9 @@ export interface QueuePlayer {
   isResting?: boolean;
   isPowerGuest?: boolean;
   notes?: string;
+  skillLevel?: number; // 1–5
+  leavingAt?: number;  // unix ms — auto-removed from queue when time passes
+  skipNext?: boolean;  // skip one round of auto-pick, then auto-cleared
 }
 
 export interface MatchRecord {
@@ -47,6 +52,8 @@ export interface TournamentMatch {
   // Super tournament fields
   game1Scores?: Record<string, number>;
   game2Scores?: Record<string, number>;
+  // Combined per-player scores (simplified super flow — replaces game1+game2 split)
+  combinedScores?: Record<string, number>;
   game2Team1?: string[];
   game2Team2?: string[];
   game1Complete?: boolean;
@@ -71,11 +78,25 @@ export interface Tournament {
   originalQueue?: QueuePlayer[];
   // If true, players swap team partners after game 1 in Super mode
   swapTeams?: boolean;
+  // Sorted "playerA|playerB" pair keys — tracks all past partnerships in this tournament
+  partnerships?: string[];
 }
 
 export interface CourtResult {
   courtIdx: string;
   players: QueuePlayer[];
+}
+
+export interface SessionTemplate {
+  id: string;
+  name: string;
+  sport: string;
+  courts: number;
+  genderBalanced: boolean;
+  avoidRepeats: boolean;
+  rotationMode: string;
+  scoreCap: number;
+  playersPerGame: number;
 }
 
 export interface Club {
@@ -97,6 +118,10 @@ export interface Club {
   has_power_guest_pin?: boolean; // generated column — use this for display logic instead of power_guest_pin
   sport?: string | null;
   tournament?: Tournament | null;
-  rotation_mode?: 'standard' | 'winner_stays' | 'loser_stays';
+  rotation_mode?: 'standard' | 'winner_stays' | 'loser_stays' | 'challenger';
   target_game_duration?: number | null; // minutes, null/0 = disabled
+  score_cap?: number | null;           // e.g. 21 — informational win condition
+  players_per_game?: number | null;    // overrides sport default (singles/doubles toggle)
+  elo_enabled?: boolean;               // track ELO ratings after each match
+  court_names?: Record<string, string>; // custom label per court index ("0" → "Beginner", etc.)
 }

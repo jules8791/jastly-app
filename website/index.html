@@ -930,6 +930,69 @@
       line-height: 1.5;
     }
 
+    .screen-score-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(255,255,255,0.06);
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    .screen-score-name { font-size: 9px; color: rgba(255,255,255,0.7); font-weight: 600; }
+    .screen-score-num  { font-size: 16px; font-weight: 800; color: #FFEB3B; }
+    .screen-score-vs   { font-size: 9px; color: rgba(255,255,255,0.3); }
+    .screen-winner-tag { font-size: 8px; background: #FFEB3B; color: #000; border-radius: 3px; padding: 1px 4px; font-weight: 700; }
+
+    /* ── HOW IT WORKS: SCORING ─────────────────────────────── */
+    .scoring-explainer {
+      padding: 64px 0 80px;
+      background: #08080f;
+    }
+    .scoring-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 48px;
+      align-items: center;
+      margin-top: 40px;
+    }
+    .scoring-steps { display: flex; flex-direction: column; gap: 24px; }
+    .scoring-step  { display: flex; gap: 16px; align-items: flex-start; }
+    .scoring-step-num {
+      width: 32px; height: 32px;
+      background: var(--primary);
+      color: #000;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 14px;
+      flex-shrink: 0;
+    }
+    .scoring-step-body h4 { color: var(--white); font-size: 15px; margin: 0 0 4px; }
+    .scoring-step-body p  { color: var(--gray2); font-size: 13px; margin: 0; line-height: 1.6; }
+    .leaderboard-preview {
+      background: #0e0e1a;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 320px;
+      margin: 0 auto;
+    }
+    .lb-title { color: var(--primary); font-weight: 700; font-size: 13px; letter-spacing: 1px; margin-bottom: 16px; }
+    .lb-row {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .lb-row:last-child { border-bottom: none; }
+    .lb-pos { width: 24px; font-size: 13px; text-align: center; flex-shrink: 0; }
+    .lb-name { flex: 1; color: var(--white); font-size: 14px; font-weight: 600; }
+    .lb-stat { color: var(--gray2); font-size: 12px; }
+    .lb-bar-wrap { width: 60px; height: 6px; background: var(--border); border-radius: 3px; }
+    .lb-bar { height: 100%; background: var(--primary); border-radius: 3px; }
+    @media (max-width: 700px) {
+      .scoring-grid { grid-template-columns: 1fr; }
+      .leaderboard-preview { max-width: 100%; }
+    }
+
     /* ── FOOTER ───────────────────────────────────────────── */
     footer {
       background: #000;
@@ -1383,19 +1446,110 @@
           </div>
           <p class="phone-caption">Courts dashboard with live timers</p>
         </div>
-        <!-- Stats screen -->
+        <!-- Score entry screen -->
         <div class="phone-mockup fade-in">
           <div class="phone-frame">
-            <div class="phone-screen" style="background:linear-gradient(160deg,#1a0a2e 0%,#2d1b69 100%);">
-              <div class="screen-label">🏆 STATS</div>
+            <div class="phone-screen" style="background:linear-gradient(160deg,#1a0528 0%,#2d0a1a 100%);">
+              <div class="screen-label">📝 SCORE</div>
+              <div class="screen-score-row">
+                <div>
+                  <div class="screen-score-name">ALICE &amp; BOB</div>
+                  <div class="screen-score-num">21</div>
+                </div>
+                <div class="screen-score-vs">vs</div>
+                <div style="text-align:right">
+                  <div class="screen-score-name">CAROL &amp; DAN</div>
+                  <div class="screen-score-num">15</div>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                <div class="screen-winner-tag">WINNERS</div>
+                <div class="screen-score-name" style="color:#FFEB3B">ALICE &amp; BOB</div>
+              </div>
+              <div class="screen-line" style="margin-top:6px;"></div>
+              <div class="screen-line short"></div>
               <div class="screen-stat-row"><div class="stat-medal">🥇</div><div class="stat-bar" style="width:88%"></div></div>
-              <div class="screen-stat-row"><div class="stat-medal">🥈</div><div class="stat-bar" style="width:74%"></div></div>
-              <div class="screen-stat-row"><div class="stat-medal">🥉</div><div class="stat-bar" style="width:60%"></div></div>
-              <div class="screen-stat-row"><div class="stat-medal">#4</div><div class="stat-bar" style="width:44%"></div></div>
-              <div class="screen-stat-row"><div class="stat-medal">#5</div><div class="stat-bar" style="width:30%"></div></div>
+              <div class="screen-stat-row"><div class="stat-medal">🥈</div><div class="stat-bar" style="width:64%"></div></div>
+              <div class="screen-stat-row"><div class="stat-medal">🥉</div><div class="stat-bar" style="width:48%"></div></div>
             </div>
           </div>
-          <p class="phone-caption">Player stats and leaderboard</p>
+          <p class="phone-caption">Score entry &amp; leaderboard</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SCORING EXPLAINER -->
+  <section class="scoring-explainer" id="scoring">
+    <div class="section-inner">
+      <div class="fade-in" style="text-align:center; margin-bottom:0;">
+        <div class="section-label">Scoring &amp; Leaderboards</div>
+        <h2 class="section-title">Track every win. <span>Reward every player.</span></h2>
+        <p class="section-subtitle" style="max-width:520px; margin:12px auto 0;">Optional scoring turns your casual session into a ranked competition — automatically.</p>
+      </div>
+      <div class="scoring-grid fade-in">
+        <div class="scoring-steps">
+          <div class="scoring-step">
+            <div class="scoring-step-num">1</div>
+            <div class="scoring-step-body">
+              <h4>End the match</h4>
+              <p>When a court finishes, tap <strong>End Match</strong>. Enter the score (e.g. 21–15) and select the winners with a single tap.</p>
+            </div>
+          </div>
+          <div class="scoring-step">
+            <div class="scoring-step-num">2</div>
+            <div class="scoring-step-body">
+              <h4>Stats update instantly</h4>
+              <p>Wins, losses, games played and win percentage are updated in real time — visible to every player in the session.</p>
+            </div>
+          </div>
+          <div class="scoring-step">
+            <div class="scoring-step-num">3</div>
+            <div class="scoring-step-body">
+              <h4>Leaderboard ranks your players</h4>
+              <p>The leaderboard sorts players by win rate. Open it any time from the host menu — or share a summary at the end of the session.</p>
+            </div>
+          </div>
+          <div class="scoring-step">
+            <div class="scoring-step-num">4</div>
+            <div class="scoring-step-body">
+              <h4>Session Summary</h4>
+              <p>At the end of the night, view the MVP, total matches played, and top 3 performers — and share it with your group.</p>
+            </div>
+          </div>
+        </div>
+        <div class="leaderboard-preview">
+          <div class="lb-title">🏆 LEADERBOARD</div>
+          <div class="lb-row">
+            <div class="lb-pos">🥇</div>
+            <div class="lb-name">Alice</div>
+            <div class="lb-stat">8W · 1L</div>
+            <div class="lb-bar-wrap"><div class="lb-bar" style="width:89%"></div></div>
+          </div>
+          <div class="lb-row">
+            <div class="lb-pos">🥈</div>
+            <div class="lb-name">Marcus</div>
+            <div class="lb-stat">6W · 2L</div>
+            <div class="lb-bar-wrap"><div class="lb-bar" style="width:75%"></div></div>
+          </div>
+          <div class="lb-row">
+            <div class="lb-pos">🥉</div>
+            <div class="lb-name">Sarah</div>
+            <div class="lb-stat">5W · 2L</div>
+            <div class="lb-bar-wrap"><div class="lb-bar" style="width:71%"></div></div>
+          </div>
+          <div class="lb-row">
+            <div class="lb-pos" style="color:var(--gray2)">#4</div>
+            <div class="lb-name">James</div>
+            <div class="lb-stat">4W · 3L</div>
+            <div class="lb-bar-wrap"><div class="lb-bar" style="width:57%"></div></div>
+          </div>
+          <div class="lb-row">
+            <div class="lb-pos" style="color:var(--gray2)">#5</div>
+            <div class="lb-name">Priya</div>
+            <div class="lb-stat">3W · 4L</div>
+            <div class="lb-bar-wrap"><div class="lb-bar" style="width:43%"></div></div>
+          </div>
         </div>
       </div>
     </div>

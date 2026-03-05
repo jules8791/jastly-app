@@ -68,14 +68,16 @@ export function ClubQRModal({ visible, title, deepLink, onClose }: ClubQRModalPr
 export interface LeaderboardModalProps {
   visible: boolean;
   leaderboard: Player[];
+  eloEnabled?: boolean;
   onClose: () => void;
 }
 
-export function LeaderboardModal({ visible, leaderboard, onClose }: LeaderboardModalProps) {
+export function LeaderboardModal({ visible, leaderboard, eloEnabled, onClose }: LeaderboardModalProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const sorted = [...leaderboard].sort((a, b) => {
+    if (eloEnabled) return (b.elo ?? 1000) - (a.elo ?? 1000);
     const rA = a.games > 0 ? a.wins / a.games : 0;
     const rB = b.games > 0 ? b.wins / b.games : 0;
     return rB !== rA ? rB - rA : (b.games || 0) - (a.games || 0);
@@ -92,12 +94,16 @@ export function LeaderboardModal({ visible, leaderboard, onClose }: LeaderboardM
             <Text style={{ color: colors.gray3, fontSize: 10, flex: 1 }}>PLAYER</Text>
             <Text style={{ color: colors.gray3, fontSize: 10, width: 30, textAlign: 'center' }}>G</Text>
             <Text style={{ color: colors.gray3, fontSize: 10, width: 30, textAlign: 'center' }}>W</Text>
-            <Text style={{ color: colors.gray3, fontSize: 10, width: 44, textAlign: 'right' }}>WIN%</Text>
+            {eloEnabled
+              ? <Text style={{ color: colors.gray3, fontSize: 10, width: 44, textAlign: 'right' }}>ELO</Text>
+              : <Text style={{ color: colors.gray3, fontSize: 10, width: 44, textAlign: 'right' }}>WIN%</Text>}
           </View>
           <ScrollView style={{ maxHeight: 360 }}>
             {sorted.map((p: Player, i: number) => {
               const rate = p.games > 0 ? Math.round((p.wins / p.games) * 100) : 0;
               const rateColor = rate >= 60 ? colors.green : rate >= 40 ? colors.primary : colors.gray2;
+              const elo = p.elo ?? 1000;
+              const eloColor = elo >= 1200 ? colors.green : elo >= 900 ? colors.primary : colors.gray2;
               return (
                 <View key={p.name} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: colors.borderSoft }}>
                   <Text style={{ color: i < 3 ? colors.primary : colors.gray3, fontWeight: 'bold', width: 36, fontSize: i < 3 ? 16 : 12 }}>
@@ -109,7 +115,9 @@ export function LeaderboardModal({ visible, leaderboard, onClose }: LeaderboardM
                   </View>
                   <Text style={{ color: colors.gray2, width: 30, textAlign: 'center', fontSize: 13 }}>{p.games || 0}</Text>
                   <Text style={{ color: colors.green, width: 30, textAlign: 'center', fontSize: 13, fontWeight: 'bold' }}>{p.wins || 0}</Text>
-                  <Text style={{ color: rateColor, width: 44, textAlign: 'right', fontSize: 13, fontWeight: 'bold' }}>{rate}%</Text>
+                  {eloEnabled
+                    ? <Text style={{ color: eloColor, width: 44, textAlign: 'right', fontSize: 13, fontWeight: 'bold' }}>{elo}</Text>
+                    : <Text style={{ color: rateColor, width: 44, textAlign: 'right', fontSize: 13, fontWeight: 'bold' }}>{rate}%</Text>}
                 </View>
               );
             })}
