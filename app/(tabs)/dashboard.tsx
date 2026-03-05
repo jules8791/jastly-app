@@ -56,6 +56,7 @@ Notifications.setNotificationHandler({
 export default function Dashboard() {
   const router = useRouter();
   const { width: screenWidth } = useWindowDimensions();
+  const isTablet = screenWidth >= 768;
   const { colors, mode, toggleTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -321,10 +322,20 @@ export default function Dashboard() {
     const uid = sd?.session?.user?.id;
     if (!uid) return;
     const newId = 'CLUB-' + Math.random().toString(36).substring(2, 7).toUpperCase() + Math.random().toString(36).substring(2, 7).toUpperCase();
-    const { error } = await supabase.from('clubs').insert([{ id: newId, host_uid: uid, sport, club_name: `My ${getSportConfig(sport).label} Club` }]);
+    const sportLabel = getSportConfig(sport).label;
+    const { error } = await supabase.from('clubs').insert([{ id: newId, host_uid: uid, sport, club_name: `My ${sportLabel} Club` }]);
     if (error) { Alert.alert('Error', error.message); return; }
-    await AsyncStorage.setItem('currentClubId', newId);
-    router.replace('/dashboard');
+    Alert.alert(
+      `${sportLabel} Club Created`,
+      `"My ${sportLabel} Club" is ready. Switch to it now, or stay in your current session and switch later via My Clubs in Settings.`,
+      [
+        { text: 'Stay Here', style: 'cancel' },
+        { text: 'Switch Now', onPress: async () => {
+            await AsyncStorage.setItem('currentClubId', newId);
+            router.replace('/dashboard');
+          }},
+      ],
+    );
   };
 
   const saveSettings = () => { void doSaveSettings(); };
@@ -571,8 +582,8 @@ export default function Dashboard() {
 
       {/* ── MAIN CONTENT ── */}
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-        <View>
-          <View>
+        <View style={isTablet ? { flexDirection: 'row', alignItems: 'flex-start' } : {}}>
+          <View style={isTablet ? { width: Math.min(screenWidth * 0.48, 520) } : {}}>
             <CourtsGrid
               activeCourts={club.active_courts || 4}
               courtOccupants={club.court_occupants || {}}
@@ -600,7 +611,7 @@ export default function Dashboard() {
               onSubstitute={openSubstitute}
             />
           </View>
-          <View>
+          <View style={isTablet ? { flex: 1, borderLeftWidth: 1, borderLeftColor: colors.border, minHeight: 400 } : {}}>
             {club.tournament ? (
               <TournamentPanel
                 tournament={club.tournament}
@@ -677,6 +688,10 @@ export default function Dashboard() {
                   if (isHost) processRequest({ action: 'set_skill_level', payload: { targetName: name, skillLevel }, _fromHost: true });
                   else sendReq('set_skill_level', { targetName: name, skillLevel, name: myName });
                 } : undefined}
+                onSetSkipNext={(name) => {
+                  if (isHost) processRequest({ action: 'set_skip_next', payload: { targetName: name }, _fromHost: true });
+                  else sendReq('set_skip_next', { targetName: name, name: myName });
+                }}
               />
             )}
           </View>
