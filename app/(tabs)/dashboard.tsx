@@ -37,6 +37,7 @@ import {
 } from '../../components/dashboard/TournamentModals';
 import { TournamentMatch, TournamentTeam } from '../../types';
 import { useClubSession } from '../../hooks/useClubSession';
+import { getSportConfig } from '../../constants/sports';
 import { DashboardHeader } from '../../components/dashboard/DashboardHeader';
 import { GuestStatusBanner } from '../../components/dashboard/GuestStatusBanner';
 import { CourtsGrid } from '../../components/dashboard/CourtsGrid';
@@ -60,7 +61,7 @@ export default function Dashboard() {
 
   const session = useClubSession();
   const {
-    isHost, hostNickname, club, setClub, myName, cidRef, isOnline,
+    isHost, isEmailHost, hostNickname, club, setClub, myName, cidRef, isOnline,
     isSavingPlayer, setIsSavingPlayer, isSavingSettings, setIsSavingSettings,
     isProcessingAction, setIsProcessingAction, isMyTurnBanner, setIsMyTurnBanner,
     ttsVoice, setTtsVoice, repeatEnabled, setRepeatEnabled,
@@ -72,7 +73,7 @@ export default function Dashboard() {
     hasShownStartupRef, logs, addLog, getRoster, updateRoster, safeEqual,
     shareSessionStats, exportStats, processRequest, sendReq,
     grantPowerGuest, handleAutoPick, assignCourt, finishMatch, doSubstitute, claimPowerGuest,
-    undoLastAction, courtStartTimes,
+    undoLastAction, courtStartTimes, courtServe,
   } = session;
 
   // ─── Courts & Queue ────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export default function Dashboard() {
   // ─── Settings ─────────────────────────────────────────────────────────────
   const [showSettings, setShowSettings] = useState(false);
   const [tempSettings, setTempSettings] = useState<TempSettings>(DEFAULT_TEMP_SETTINGS);
+  const [hostClubs, setHostClubs] = useState<{ id: string; club_name: string | null; sport: string | null }[]>([]);
 
   // ─── PIN ───────────────────────────────────────────────────────────────────
   const [showSetupPin, setShowSetupPin] = useState(false);
@@ -237,9 +239,63 @@ export default function Dashboard() {
     ]);
   };
 
+  // ─── Session Templates ────────────────────────────────────────────────────
+  const [sessionTemplates, setSessionTemplates] = useState<import('../../types').SessionTemplate[]>([]);
+  useEffect(() => {
+    AsyncStorage.getItem('session_templates').then(raw => {
+      if (raw) try { setSessionTemplates(JSON.parse(raw)); } catch {}
+    });
+  }, []);
+
+  const saveTemplate = async (name: string) => {
+    if (!club) return;
+    const t: import('../../types').SessionTemplate = {
+      id: Date.now().toString(),
+      name,
+      sport: club.sport || 'badminton',
+      courts: club.active_courts || 4,
+      genderBalanced: club.gender_balanced,
+      avoidRepeats: club.avoid_repeats,
+      rotationMode: club.rotation_mode ?? 'standard',
+      scoreCap: club.score_cap ?? 0,
+      playersPerGame: club.players_per_game ?? 0,
+    };
+    const next = [...sessionTemplates, t];
+    setSessionTemplates(next);
+    await AsyncStorage.setItem('session_templates', JSON.stringify(next));
+  };
+
+  const loadTemplate = (t: import('../../types').SessionTemplate) => {
+    setTempSettings(prev => ({
+      ...prev,
+      sport: t.sport,
+      courts: t.courts,
+      genderBalanced: t.genderBalanced,
+      avoidRepeats: t.avoidRepeats,
+      rotationMode: t.rotationMode as any,
+      scoreCap: t.scoreCap,
+      playersPerGame: t.playersPerGame,
+    }));
+  };
+
+  const deleteTemplate = async (id: string) => {
+    const next = sessionTemplates.filter(t => t.id !== id);
+    setSessionTemplates(next);
+    await AsyncStorage.setItem('session_templates', JSON.stringify(next));
+  };
+
   // ─── Settings Logic ───────────────────────────────────────────────────────
   const openSettings = () => {
     if (!club) return;
+    if (isEmailHost) {
+      supabase.auth.getSession().then(({ data: sd }) => {
+        const uid = sd?.session?.user?.id;
+        if (uid) {
+          supabase.from('clubs').select('id, club_name, sport').eq('host_uid', uid)
+            .then(({ data }) => { if (data) setHostClubs(data); });
+        }
+      });
+    }
     setTempSettings({
       clubName: club.club_name || '',
       courts: club.active_courts || 4,
@@ -250,21 +306,42 @@ export default function Dashboard() {
       clubPassword: '',
       soundEnabled,
       powerGuestEnabled: !!(club.has_power_guest_pin ?? club.power_guest_pin),
-      rotationMode: (club.rotation_mode ?? 'standard') as 'standard' | 'winner_stays' | 'loser_stays',
+      rotationMode: (club.rotation_mode ?? 'standard') as 'standard' | 'winner_stays' | 'loser_stays' | 'challenger',
       targetGameDuration: club.target_game_duration ?? 0,
+      scoreCap: club.score_cap ?? 0,
+      playersPerGame: club.players_per_game ?? 0,
+      eloEnabled: club.elo_enabled ?? false,
+      courtNames: club.court_names ?? {},
     });
     setShowSettings(true);
   };
 
-  const saveSettings = async () => {
+  const createClubForSport = async (sport: string) => {
+    const { data: sd } = await supabase.auth.getSession();
+    const uid = sd?.session?.user?.id;
+    if (!uid) return;
+    const newId = 'CLUB-' + Math.random().toString(36).substring(2, 7).toUpperCase() + Math.random().toString(36).substring(2, 7).toUpperCase();
+    const { error } = await supabase.from('clubs').insert([{ id: newId, host_uid: uid, sport, club_name: `My ${getSportConfig(sport).label} Club` }]);
+    if (error) { Alert.alert('Error', error.message); return; }
+    await AsyncStorage.setItem('currentClubId', newId);
+    router.replace('/dashboard');
+  };
+
+  const saveSettings = () => { void doSaveSettings(); };
+
+  const doSaveSettings = async () => {
     if (!isHost || isSavingSettings) return;
     setIsSavingSettings(true);
     try {
       const hashedPw = tempSettings.clubPassword.trim() ? await makeHash(tempSettings.clubPassword.trim()) : null;
+      const ppg = tempSettings.playersPerGame || null;
       setClub((prev: any) => ({ ...prev, club_name: tempSettings.clubName, active_courts: tempSettings.courts,
         pick_limit: tempSettings.limit, gender_balanced: tempSettings.genderBalanced,
         avoid_repeats: tempSettings.avoidRepeats, join_password: hashedPw, sport: tempSettings.sport,
-        rotation_mode: tempSettings.rotationMode, target_game_duration: tempSettings.targetGameDuration || null }));
+        rotation_mode: tempSettings.rotationMode, target_game_duration: tempSettings.targetGameDuration || null,
+        score_cap: tempSettings.scoreCap || null, players_per_game: ppg,
+        elo_enabled: tempSettings.eloEnabled,
+        court_names: Object.keys(tempSettings.courtNames).length > 0 ? tempSettings.courtNames : null }));
       const { data: sd } = await supabase.auth.getSession();
       const uid = sd?.session?.user?.id;
       await supabase.from('clubs').update({
@@ -273,6 +350,10 @@ export default function Dashboard() {
         join_password: hashedPw, sport: tempSettings.sport,
         rotation_mode: tempSettings.rotationMode,
         target_game_duration: tempSettings.targetGameDuration || null,
+        score_cap: tempSettings.scoreCap || null,
+        players_per_game: ppg,
+        elo_enabled: tempSettings.eloEnabled,
+        court_names: Object.keys(tempSettings.courtNames).length > 0 ? tempSettings.courtNames : null,
         ...(uid ? { host_uid: uid } : {}),
       }).eq('id', cidRef.current);
       setTtsVoice(tempSettings.ttsVoice); setRepeatEnabled(tempSettings.repeat);
@@ -490,14 +571,20 @@ export default function Dashboard() {
 
       {/* ── MAIN CONTENT ── */}
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
-        <View style={isWideWeb ? { flexDirection: 'row', alignItems: 'flex-start' } : {}}>
-          <View style={isWideWeb ? { flex: 3 } : {}}>
+        <View>
+          <View>
             <CourtsGrid
               activeCourts={club.active_courts || 4}
               courtOccupants={club.court_occupants || {}}
               courtLabel={courtLabel} sportEmoji={sportEmoji}
               isHost={isHost} isPowerGuest={isPowerGuest} isProcessingAction={isProcessingAction}
               courtStartTimes={courtStartTimes}
+              targetGameDuration={club.target_game_duration ?? 0}
+              courtNames={club.court_names}
+              courtServe={courtServe}
+              onAdvanceServe={isHost ? (courtIdx) => {
+                processRequest({ action: 'advance_serve', payload: { courtIdx }, _fromHost: true });
+              } : undefined}
               onFinishMatch={(courtIdx, players) => {
                 // Check if this court has an active tournament match
                 const tMatch = club.tournament?.matches.find(
@@ -513,7 +600,7 @@ export default function Dashboard() {
               onSubstitute={openSubstitute}
             />
           </View>
-          <View style={isWideWeb ? { flex: 2 } : {}}>
+          <View>
             {club.tournament ? (
               <TournamentPanel
                 tournament={club.tournament}
@@ -522,14 +609,18 @@ export default function Dashboard() {
                 courtOccupants={club.court_occupants || {}}
                 onStartMatch={(match) => {
                   // Find a free court
+                  const activeCourts = club.active_courts || 4;
                   const busyCourts = new Set(Object.keys(club.court_occupants || {}).map(Number));
                   let courtIdx = 0;
-                  while (busyCourts.has(courtIdx) && courtIdx < (club.active_courts || 4)) courtIdx++;
+                  while (busyCourts.has(courtIdx) && courtIdx < activeCourts) courtIdx++;
+                  if (courtIdx >= activeCourts) {
+                    Alert.alert('No courts available', 'All courts are occupied. Finish a match first.');
+                    return;
+                  }
                   const team1 = club.tournament!.teams.find(t => t.id === match.team1Id);
                   const team2 = club.tournament!.teams.find(t => t.id === match.team2Id);
-                  // Use game2 player lists if we're in game 2
-                  const t1Names = match.game1Complete ? (match.game2Team1 ?? team1?.players ?? []) : (team1?.players ?? []);
-                  const t2Names = match.game1Complete ? (match.game2Team2 ?? team2?.players ?? []) : (team2?.players ?? []);
+                  const t1Names = team1?.players ?? [];
+                  const t2Names = team2?.players ?? [];
                   // Look up gender from originalQueue (players removed from waiting_list during tournament)
                   const rosterLookup = [...(club.tournament!.originalQueue ?? []), ...(club.waiting_list ?? [])];
                   const toPlayer = (name: string) => ({
@@ -541,10 +632,7 @@ export default function Dashboard() {
                 }}
                 onViewStandings={() => setShowTournamentStandings(true)}
                 onEndTournament={() => {
-                  Alert.alert('End Tournament', 'Are you sure you want to end the tournament?', [
-                    { text: 'Cancel', style: 'cancel' },
-                    { text: 'End', style: 'destructive', onPress: () => processRequest({ action: 'tournament_end', payload: {}, _fromHost: true }) },
-                  ]);
+                  processRequest({ action: 'tournament_end', payload: {}, _fromHost: true });
                 }}
                 onTeamPress={(team) => setSelectedTeamDetail(team)}
               />
@@ -580,6 +668,14 @@ export default function Dashboard() {
                 onBatchAdd={isHost || isPowerGuest ? () => setShowBatchAdd(true) : undefined}
                 onSetPlayerNote={isHost ? (name, note) => {
                   processRequest({ action: 'set_player_note', payload: { name, note }, _fromHost: true });
+                } : undefined}
+                onSetLeavingAt={(name, leavingAt) => {
+                  if (isHost) processRequest({ action: 'set_leaving_at', payload: { targetName: name, leavingAt }, _fromHost: true });
+                  else sendReq('set_leaving_at', { targetName: name, leavingAt, name: myName });
+                }}
+                onSetSkillLevel={isHost || isPowerGuest ? (name, skillLevel) => {
+                  if (isHost) processRequest({ action: 'set_skill_level', payload: { targetName: name, skillLevel }, _fromHost: true });
+                  else sendReq('set_skill_level', { targetName: name, skillLevel, name: myName });
                 } : undefined}
               />
             )}
@@ -627,6 +723,18 @@ export default function Dashboard() {
         onShowSetupGuide={() => { setShowSettings(false); setShowSetupGuide(true); }}
         onShowTournament={() => { setShowSettings(false); setShowTournamentSetup(true); }}
         tournamentActive={!!club?.tournament}
+        isEmailHost={isEmailHost}
+        onCreateNewClub={(sport) => { setShowSettings(false); createClubForSport(sport); }}
+        hostClubs={hostClubs}
+        onSwitchToClub={async (clubId) => {
+          setShowSettings(false);
+          await AsyncStorage.setItem('currentClubId', clubId);
+          router.replace('/dashboard');
+        }}
+        sessionTemplates={sessionTemplates}
+        onSaveTemplate={saveTemplate}
+        onLoadTemplate={loadTemplate}
+        onDeleteTemplate={deleteTemplate}
       />
 
       <HelpModal visible={showHelp} sportEmoji={sportEmoji} courtLabel={courtLabel} onClose={() => setShowHelp(false)} />
@@ -668,7 +776,7 @@ export default function Dashboard() {
       <ClubQRModal visible={showQR} title="SHARE CLUB" deepLink={`https://app.jastly.com/join?clubId=${club?.id}`} onClose={() => setShowQR(false)} />
       <SystemLogsModal visible={showLogs} logs={logs} onClose={() => setShowLogs(false)} />
       <ClubQRModal visible={showJoinQR} title="INVITE PLAYERS" deepLink={`https://app.jastly.com/join?clubId=${club?.id}`} onClose={() => setShowJoinQR(false)} />
-      <LeaderboardModal visible={showLeaderboard} leaderboard={leaderboard} onClose={() => setShowLeaderboard(false)} />
+      <LeaderboardModal visible={showLeaderboard} leaderboard={leaderboard} eloEnabled={club?.elo_enabled} onClose={() => setShowLeaderboard(false)} />
       <SessionSummaryModal visible={showSessionSummary} matchHistory={matchHistory} roster={roster}
         sportEmoji={sportEmoji} clubName={club?.club_name || ''} onClose={() => setShowSessionSummary(false)}
         onShare={() => { setShowSessionSummary(false); shareSessionStats(); }} />
@@ -693,9 +801,25 @@ export default function Dashboard() {
         onClose={() => setShowSetupGuide(false)}
         onFinish={async ({ sport, courts, genderBalanced, avoidRepeats }) => {
           setShowSetupGuide(false);
-          setTempSettings(prev => ({ ...prev, sport, courts, genderBalanced, avoidRepeats }));
-          setClub((prev: any) => ({ ...prev, sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }));
-          await supabase.from('clubs').update({ sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }).eq('id', cidRef.current);
+          const sportChanged = club?.sport && sport !== club.sport;
+          if (sportChanged && isEmailHost) {
+            Alert.alert(
+              'Different sport selected',
+              `Create a new ${sport} club, or update this club's sport?`,
+              [
+                { text: 'Update this club', onPress: async () => {
+                    setTempSettings(prev => ({ ...prev, sport, courts, genderBalanced, avoidRepeats }));
+                    setClub((prev: any) => ({ ...prev, sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }));
+                    await supabase.from('clubs').update({ sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }).eq('id', cidRef.current);
+                  }},
+                { text: `Create new ${sport} club`, onPress: () => createClubForSport(sport) },
+              ],
+            );
+          } else {
+            setTempSettings(prev => ({ ...prev, sport, courts, genderBalanced, avoidRepeats }));
+            setClub((prev: any) => ({ ...prev, sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }));
+            await supabase.from('clubs').update({ sport, active_courts: courts, gender_balanced: genderBalanced, avoid_repeats: avoidRepeats }).eq('id', cidRef.current);
+          }
         }}
       />
 
