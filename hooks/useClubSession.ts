@@ -163,8 +163,9 @@ export function useClubSession() {
     setLogs(prev => [`[${time}] ${msg}`, ...prev].slice(0, 100));
   };
 
+  // \p{L} = any unicode letter (covers accents, non-Latin scripts); \p{N} = any digit
   const sanitiseName = (n: string) =>
-    (n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
+    (n || '').replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
 
   const getRoster = (c: Club | null): Player[] => {
     if (!c) return [];

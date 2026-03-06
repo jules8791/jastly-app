@@ -273,7 +273,7 @@ export default function Dashboard() {
     if (!isHost || isSavingPlayer) return;
     const raw = rawNameInput.trim();
     if (!raw) return;
-    const clean = raw.replace(/[^a-zA-Z0-9 ]/g, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
+    const clean = raw.replace(/[^\p{L}\p{N} ]/gu, '').replace(/\s+/g, ' ').trim().toUpperCase().substring(0, 20);
     if (!clean) { Alert.alert('Invalid name', 'Name must contain letters or numbers.'); return; }
     const sportK = club?.sport || 'badminton';
     let nextRoster = [...getRoster(club)];

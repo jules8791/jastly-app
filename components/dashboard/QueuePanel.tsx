@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { FlatList, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
 import { Club, QueuePlayer } from '../../types';
@@ -47,7 +47,7 @@ const SKILL_LABELS = ['', 'Beg', 'Nov', 'Int', 'Adv', 'Pro'];
 
 type ConfirmAction = 'pause' | 'resume' | 'remove' | 'grant_power' | 'revoke_power';
 
-export function QueuePanel({
+function QueuePanelBase({
   club,
   overrideWaitingList,
   isHost,
@@ -73,7 +73,7 @@ export function QueuePanel({
   onSetSkillLevel,
   onSetSkipNext,
   onSetGender,
-}: QueuePanelProps) {
+}: QueuePanelProps): React.ReactElement {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
@@ -523,3 +523,5 @@ export function QueuePanel({
     </>
   );
 }
+
+export const QueuePanel = memo(QueuePanelBase);

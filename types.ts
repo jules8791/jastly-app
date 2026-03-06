@@ -150,6 +150,9 @@ export interface SessionTemplate {
   playersPerGame: number;
 }
 
+/** master_roster is Player[] (legacy flat) or Record<sportKey, Player[]> (sport-keyed). */
+export type MasterRoster = Player[] | Record<string, Player[]>;
+
 export interface Club {
   id: string;
   club_name: string;
@@ -157,7 +160,7 @@ export interface Club {
   pick_limit: number;
   waiting_list: QueuePlayer[];
   court_occupants: Record<string, QueuePlayer[]>;
-  master_roster: any; // Player[] (legacy) or Record<string, Player[]> (sport-keyed)
+  master_roster: MasterRoster;
   match_history: MatchRecord[];
   saved_queue: QueuePlayer[];
   join_password: string | null;
