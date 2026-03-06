@@ -16,6 +16,7 @@ export interface QueuePlayer {
   skillLevel?: number; // 1–5
   leavingAt?: number;  // unix ms — auto-removed from queue when time passes
   skipNext?: boolean;  // skip one round of auto-pick, then auto-cleared
+  _pending?: boolean;  // client-only: true while optimistic update is in flight
 }
 
 export interface MatchRecord {

@@ -8,6 +8,7 @@ import { makeStyles } from './dashboardStyles';
 interface QueuePanelProps {
   onUndo?: () => void;
   club: Club;
+  overrideWaitingList?: QueuePlayer[]; // optimistic list from useClubSession
   isHost: boolean;
   isPowerGuest: boolean;
   myName: string;
@@ -48,6 +49,7 @@ type ConfirmAction = 'pause' | 'resume' | 'remove' | 'grant_power' | 'revoke_pow
 
 export function QueuePanel({
   club,
+  overrideWaitingList,
   isHost,
   isPowerGuest,
   myName,
@@ -115,7 +117,7 @@ export function QueuePanel({
     ...extra,
   });
 
-  const waitingList: QueuePlayer[] = club.waiting_list || [];
+  const waitingList: QueuePlayer[] = overrideWaitingList ?? club.waiting_list ?? [];
   const firstActiveIdx = waitingList.findIndex((w: QueuePlayer) => !w.isResting);
 
   const confirmLabels: Record<ConfirmAction, { title: string; body: string; btn: string; color: string }> = {
@@ -150,6 +152,7 @@ export function QueuePanel({
         {/* Row: sibling touchables so ··· never nests inside the row press */}
         <View style={[styles.queueRow,
           p.isResting && { opacity: 0.4 },
+          p._pending && !p.isResting && { opacity: 0.65 },
           isMe && { borderWidth: 1, borderColor: colors.green },
           isSelected && { backgroundColor: colors.selectedBg, borderWidth: 1, borderColor: colors.primary },
           { flexDirection: 'row', alignItems: 'center' },
@@ -180,6 +183,11 @@ export function QueuePanel({
                 {p.isPowerGuest && (
                   <View style={{ backgroundColor: colors.deepBlue, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 6 }}>
                     <Text style={{ color: colors.primary, fontSize: 9, fontWeight: 'bold' }}>⚡ POWER</Text>
+                  </View>
+                )}
+                {p._pending && (
+                  <View style={{ borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, marginLeft: 4 }}>
+                    <Text style={{ color: colors.gray3, fontSize: 9 }}>⏳</Text>
                   </View>
                 )}
                 {p.skipNext && (

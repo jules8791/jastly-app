@@ -74,7 +74,7 @@ export default function Dashboard() {
     hasShownStartupRef, logs, addLog, getRoster, updateRoster, safeEqual,
     shareSessionStats, exportStats, requestNotificationPermission, processRequest, sendReq,
     grantPowerGuest, handleAutoPick, assignCourt, finishMatch, doSubstitute, claimPowerGuest,
-    undoLastAction, courtStartTimes, courtServe,
+    undoLastAction, courtStartTimes, courtServe, effectiveWaitingList,
   } = session;
 
   // ─── Courts & Queue ────────────────────────────────────────────────────────
@@ -650,7 +650,8 @@ export default function Dashboard() {
               />
             ) : (
               <QueuePanel
-                club={club} isHost={isHost} isPowerGuest={isPowerGuest} myName={myName}
+                club={club} overrideWaitingList={effectiveWaitingList}
+                isHost={isHost} isPowerGuest={isPowerGuest} myName={myName}
                 selectedQueueIdx={selectedQueueIdx} playersPerGame={playersPerGame}
                 sportEmoji={sportEmoji} courtLabel={courtLabel}
                 genderBalanced={genderBalanced} avoidRepeats={avoidRepeats}

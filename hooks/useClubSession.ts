@@ -85,6 +85,57 @@ export function useClubSession() {
   useEffect(() => { isHostRef.current = isHost; }, [isHost]);
   useEffect(() => { soundEnabledRef.current = soundEnabled; }, [soundEnabled]);
 
+  // ─── Optimistic updates (guest actions) ───────────────────────────────────
+  type OptimisticDelta = {
+    action: string;
+    addToQueue: boolean;
+    removeFromQueue: boolean;
+    patch: Partial<QueuePlayer>;
+    sentAt: number;
+  };
+  const [optimisticDelta, setOptimisticDelta] = useState<OptimisticDelta | null>(null);
+
+  // Timeout fallback: clear stale optimistic state after 8 s if host doesn't respond
+  useEffect(() => {
+    if (!optimisticDelta) return;
+    const t = setTimeout(() => setOptimisticDelta(null), 8000);
+    return () => clearTimeout(t);
+  }, [optimisticDelta?.sentAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear when the real club state reflects the pending change
+  useEffect(() => {
+    if (!optimisticDelta || isHostRef.current) return;
+    const name = myNameRef.current;
+    const realList: QueuePlayer[] = clubRef.current?.waiting_list || [];
+    const me = realList.find(p => p.name === name);
+    const resolved = optimisticDelta.removeFromQueue
+      ? !me
+      : optimisticDelta.addToQueue
+        ? !!me
+        : !!me && Object.entries(optimisticDelta.patch).every(([k, v]) => (me as any)[k] === v);
+    if (resolved) setOptimisticDelta(null);
+  }, [club]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The waiting list guests actually see — real state + any in-flight optimistic change
+  const effectiveWaitingList = useMemo((): QueuePlayer[] => {
+    const real: QueuePlayer[] = club?.waiting_list || [];
+    if (!optimisticDelta || isHostRef.current || isPowerGuestRef.current) return real;
+    const name = myNameRef.current;
+    if (optimisticDelta.removeFromQueue) {
+      return real.filter(p => p.name !== name);
+    }
+    const existingIdx = real.findIndex(p => p.name === name);
+    if (optimisticDelta.addToQueue && existingIdx === -1) {
+      return [...real, { name, gender: 'M', ...optimisticDelta.patch, _pending: true }];
+    }
+    if (existingIdx !== -1 && Object.keys(optimisticDelta.patch).length > 0) {
+      return real.map((p, i) =>
+        i === existingIdx ? { ...p, ...optimisticDelta.patch, _pending: true } : p
+      );
+    }
+    return real;
+  }, [club, optimisticDelta]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ─── Derived: sport config ────────────────────────────────────────────────
   const { emoji: sportEmoji, court: courtLabel, playersPerGame: sportPlayersPerGame, label: sportLabel } = useMemo(
     () => getSportConfig(club?.sport), [club?.sport]
@@ -885,9 +936,37 @@ export function useClubSession() {
 
   const sendReq = (action: string, payload: any = {}) => {
     const name = myNameRef.current || myName;
+
+    // Apply optimistic update immediately for known guest actions so the UI
+    // responds without waiting for the host to process the request (~1-3 s).
+    if (!isHostRef.current) {
+      const me = (clubRef.current?.waiting_list || []).find((p: QueuePlayer) => p.name === name);
+      let delta: OptimisticDelta | null = null;
+
+      if (action === 'batch_join' || action === 'join') {
+        const gender: 'M' | 'F' = payload.players?.[0]?.gender ?? me?.gender ?? 'M';
+        delta = { action, addToQueue: true, removeFromQueue: false, patch: { gender }, sentAt: Date.now() };
+      } else if (action === 'leave') {
+        delta = { action, addToQueue: false, removeFromQueue: true, patch: {}, sentAt: Date.now() };
+      } else if (action === 'toggle_pause' && me) {
+        delta = { action, addToQueue: false, removeFromQueue: false, patch: { isResting: !me.isResting }, sentAt: Date.now() };
+      } else if (action === 'set_skip_next' && me) {
+        delta = { action, addToQueue: false, removeFromQueue: false, patch: { skipNext: !me.skipNext }, sentAt: Date.now() };
+      } else if (action === 'set_gender' && me) {
+        delta = { action, addToQueue: false, removeFromQueue: false, patch: { gender: payload.gender }, sentAt: Date.now() };
+      } else if (action === 'set_leaving_at') {
+        delta = { action, addToQueue: false, removeFromQueue: false, patch: { leavingAt: payload.leavingAt ?? undefined }, sentAt: Date.now() };
+      }
+
+      if (delta) setOptimisticDelta(delta);
+    }
+
     supabase.from('requests').insert({ club_id: cidRef.current, action, payload: { ...payload, name } })
       .then(({ error }) => {
-        if (error) Alert.alert('Request failed', 'Could not send action. Please try again.');
+        if (error) {
+          setOptimisticDelta(null); // rollback on failure
+          Alert.alert('Request failed', 'Could not send action. Please try again.');
+        }
       });
   };
 
@@ -1311,6 +1390,9 @@ export function useClubSession() {
 
     // Serve rotation (host-side, not synced)
     courtServe,
+
+    // Optimistic queue (real state + in-flight guest changes merged)
+    effectiveWaitingList,
 
     // Core actions
     processRequest,
