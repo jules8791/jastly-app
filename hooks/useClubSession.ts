@@ -125,7 +125,15 @@ export function useClubSession() {
 
   // ─── Notifications ────────────────────────────────────────────────────────
   const requestNotificationPermission = async () => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web') {
+      if (typeof Notification === 'undefined') return false;
+      if (Notification.permission === 'granted') return true;
+      if (Notification.permission === 'denied') return false;
+      try {
+        const result = await Notification.requestPermission();
+        return result === 'granted';
+      } catch { return false; }
+    }
     try {
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
@@ -141,7 +149,12 @@ export function useClubSession() {
   };
 
   const sendLocalNotification = async (title: string, body: string) => {
-    if (Platform.OS === 'web') return;
+    if (Platform.OS === 'web') {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+        try { new Notification(title, { body }); } catch {}
+      }
+      return;
+    }
     try {
       await Notifications.scheduleNotificationAsync({
         content: { title, body, sound: true },
@@ -258,20 +271,6 @@ export function useClubSession() {
       if (idx !== -1) {
         next.waiting_list[idx] = { ...next.waiting_list[idx], isPowerGuest: !!grant };
         logEntries.push(`POWER: ${tName} ${grant ? 'granted' : 'revoked'} power guest.`);
-      }
-    } else if (action === 'claim_power_guest') {
-      const { pgPinHash } = payload;
-      if (!next.power_guest_pin || !pgPinHash) return null;
-      const stored = next.power_guest_pin;
-      const colonIdx = stored.indexOf(':');
-      const storedHash = colonIdx !== -1 ? stored.slice(colonIdx + 1) : stored;
-      if (!safeEqual(pgPinHash, storedHash)) {
-        return { next: prev, logs: [`SECURITY: ${requesterName} used wrong power guest PIN.`], noWrite: true };
-      }
-      const idx = next.waiting_list.findIndex((w: any) => w.name === requesterName);
-      if (idx !== -1) {
-        next.waiting_list[idx] = { ...next.waiting_list[idx], isPowerGuest: true };
-        logEntries.push(`POWER: ${requesterName} claimed power guest status.`);
       }
     } else if (action === 'batch_join') {
       let addedCount = 0;
@@ -394,6 +393,16 @@ export function useClubSession() {
       const nextActive = next.waiting_list.find((w: any) => !w.isResting);
       if (nextActive) msg += ` Next up is ${nextActive.name}.`;
       return { next, logs: logEntries, speech: msg, resetTimers: true };
+    } else if (action === 'set_gender') {
+      const tName = sanitiseName(payload.targetName || requesterName);
+      if (!elevated && tName !== requesterName) return null;
+      const g = payload.gender === 'F' ? 'F' : 'M';
+      const idx = next.waiting_list.findIndex((w: any) => w.name === tName);
+      if (idx !== -1) {
+        next.waiting_list[idx] = { ...next.waiting_list[idx], gender: g };
+        logEntries.push(`QUEUE: ${tName} gender set to ${g}.`);
+      }
+      return { next, logs: logEntries };
     } else if (action === 'set_leaving_at') {
       const { targetName, leavingAt } = payload;
       const tName = sanitiseName(targetName || requesterName);
@@ -761,6 +770,41 @@ export function useClubSession() {
       return;
     }
 
+    // claim_power_guest: verify PIN server-side (host computes hash; client sends plaintext)
+    if (req.action === 'claim_power_guest') {
+      const pin = (req.payload?.pin ?? '').toString().trim();
+      const stored = prevClub.power_guest_pin ?? '';
+      const requester = sanitiseName(req.payload?.name || '');
+      let valid = false;
+      if (pin && stored && requester) {
+        const colonIdx = stored.indexOf(':');
+        if (colonIdx !== -1) {
+          const salt = stored.slice(0, colonIdx);
+          const storedHash = stored.slice(colonIdx + 1);
+          const computed = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, salt + '::' + pin);
+          valid = safeEqual(computed, storedHash);
+        } else {
+          const computed = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `jastly::pin::${pin}`);
+          valid = safeEqual(computed, stored);
+        }
+      }
+      if (!valid) {
+        addLog(`SECURITY: ${requester || '?'} used wrong power guest PIN.`);
+        if (req.id) await supabase.from('requests').delete().eq('id', req.id);
+        return;
+      }
+      const newList = [...(prevClub.waiting_list || [])];
+      const idx = newList.findIndex((w: any) => w.name === requester);
+      if (idx !== -1) newList[idx] = { ...newList[idx], isPowerGuest: true };
+      const next = { ...prevClub, waiting_list: newList };
+      prevClubRef.current = prevClub;
+      setClub(next);
+      addLog(`POWER: ${requester} claimed power guest status.`);
+      await supabase.from('clubs').update({ waiting_list: newList }).eq('id', cidRef.current);
+      if (req.id) await supabase.from('requests').delete().eq('id', req.id);
+      return;
+    }
+
     const result = applyRequest(prevClub, req);
     if (!result) return;
 
@@ -852,18 +896,11 @@ export function useClubSession() {
     processRequest({ action: 'grant_power_guest', payload: { targetName, grant }, _fromHost: true });
   };
 
-  const claimPowerGuest = async (pinInput: string) => {
+  const claimPowerGuest = (pinInput: string) => {
     if (!pinInput.trim() || !(club?.has_power_guest_pin ?? club?.power_guest_pin)) return;
-    const stored = club.power_guest_pin ?? '';
-    const colonIdx = stored.indexOf(':');
-    let pgPinHash: string;
-    if (colonIdx !== -1) {
-      const salt = stored.slice(0, colonIdx);
-      pgPinHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, salt + '::' + pinInput.trim());
-    } else {
-      pgPinHash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, `jastly::pin::${pinInput.trim()}`);
-    }
-    sendReq('claim_power_guest', { pgPinHash });
+    // Send plaintext PIN — protected in transit by TLS and at rest by RLS
+    // (requests table is only readable by the host). The host verifies server-side.
+    sendReq('claim_power_guest', { pin: pinInput.trim() });
     Alert.alert('Request sent', 'The host will verify your PIN and grant access.');
   };
 
@@ -1080,7 +1117,7 @@ export function useClubSession() {
             .subscribe();
         }
 
-        if (!isActuallyHost) {
+        if (!isActuallyHost && Platform.OS !== 'web') {
           requestNotificationPermission();
         }
       } catch (e) {
@@ -1144,7 +1181,7 @@ export function useClubSession() {
           const hb = guestHeartbeatsRef.current[w.name];
           if (!hb) return false;
           const onCourt = Object.values(c.court_occupants || {}).flat().some((p: any) => p.name === w.name);
-          return !onCourt && (now - hb) > 120_000;
+          return !onCourt && !w.isResting && (now - hb) > 120_000;
         });
         if (stale.length > 0) {
           const staleNames = new Set(stale.map((w: any) => w.name));
@@ -1263,11 +1300,11 @@ export function useClubSession() {
     addLog,
 
     // Helper functions
-    sanitiseName,
     getRoster,
     updateRoster,
     safeEqual,
     sendLocalNotification,
+    requestNotificationPermission,
     playChime,
     shareSessionStats,
     exportStats,

@@ -33,7 +33,12 @@ DROP VIEW IF EXISTS public.clubs_public;
 -- be readable by unauthenticated (anon role) API calls.
 -- Password validation is done server-side via the RPC below.
 -- ────────────────────────────────────────────────────────────
+-- Revoke sensitive columns from unauthenticated users
 REVOKE SELECT (join_password, power_guest_pin) ON public.clubs FROM anon;
+-- Also revoke from authenticated (including anonymous sessions) — guests must not be able to
+-- read the power_guest_pin hash to avoid crafting a valid hash without knowing the PIN.
+-- The host device reads it via the in-memory club state after loading as host (host_uid = auth.uid()).
+REVOKE SELECT (power_guest_pin) ON public.clubs FROM authenticated;
 
 -- Server-side password validation RPC (called by join.tsx)
 -- Accepts plaintext password and compares server-side so the stored hash

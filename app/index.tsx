@@ -48,6 +48,7 @@ export default function WelcomeScreen() {
 
   const [clubId, setClubId] = useState('');
   const [name, setName] = useState('');
+  const [gender, setGender] = useState<'M' | 'F'>('M');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [recentClubs, setRecentClubs] = useState<RecentClub[]>([]);
@@ -166,6 +167,8 @@ export default function WelcomeScreen() {
 
       if (savedName) setName(savedName);
       if (savedClubId) setClubId(savedClubId);
+      const savedGender = await AsyncStorage.getItem('guestGender');
+      if (savedGender === 'F') setGender('F');
 
       // Any non-anonymous host (email, Google, Apple) — restore their club(s)
       const { data: { session } } = await supabase.auth.getSession();
@@ -509,11 +512,19 @@ export default function WelcomeScreen() {
       const onCourt = Object.values(club.court_occupants || {}).flat().some((p: any) => (p as any).name === recent.myName);
 
       if (!inQueue && !onCourt) {
-        await supabase.from('requests').insert({
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          const { error: authError } = await supabase.auth.signInAnonymously();
+          if (authError) throw authError;
+        }
+        const savedGender = await AsyncStorage.getItem('guestGender');
+        const quickGender: 'M' | 'F' = savedGender === 'F' ? 'F' : 'M';
+        const { error: insertError } = await supabase.from('requests').insert({
           club_id: recent.id,
           action: 'batch_join',
-          payload: { name: recent.myName, players: [{ name: recent.myName, gender: 'M' }] },
+          payload: { name: recent.myName, players: [{ name: recent.myName, gender: quickGender }] },
         });
+        if (insertError) throw insertError;
       }
 
       await AsyncStorage.multiSet([
@@ -584,16 +595,25 @@ export default function WelcomeScreen() {
       const inQueue = (club.waiting_list || []).some((p: any) => p.name === cleanName);
       const onCourt = Object.values(club.court_occupants || {}).flat().some((p: any) => (p as any).name === cleanName);
 
+      // Ensure an auth session exists so the RLS policy allows the insert
+      const { data: guestSession } = await supabase.auth.getSession();
+      if (!guestSession.session) {
+        const { error: authError } = await supabase.auth.signInAnonymously();
+        if (authError) throw authError;
+      }
+
       if (!inQueue && !onCourt) {
-        await supabase.from('requests').insert({
+        const { error: insertError } = await supabase.from('requests').insert({
           club_id: cleanClubId,
           action: 'batch_join',
-          payload: { name: cleanName, players: [{ name: cleanName, gender: 'M' }] },
+          payload: { name: cleanName, players: [{ name: cleanName, gender }] },
         });
+        if (insertError) throw insertError;
       }
 
       await AsyncStorage.multiSet([
         ['guestName', cleanName],
+        ['guestGender', gender],
         ['currentClubId', cleanClubId],
         ['isHost', 'false'],
       ]);
@@ -716,6 +736,23 @@ export default function WelcomeScreen() {
           value={name}
           onChangeText={setName}
         />
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          {(['M', 'F'] as const).map(g => (
+            <TouchableOpacity
+              key={g}
+              onPress={() => setGender(g)}
+              style={{
+                flex: 1, padding: 14, borderRadius: 8, borderWidth: 2, alignItems: 'center',
+                borderColor: gender === g ? colors.primary : colors.border,
+                backgroundColor: gender === g ? colors.primary + '22' : colors.surface,
+              }}
+            >
+              <Text style={{ color: gender === g ? colors.primary : colors.gray2, fontWeight: 'bold', fontSize: 15 }}>
+                {g === 'M' ? '♂ Male' : '♀ Female'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
         <TextInput
           style={styles.input}
           placeholder="Password (if required)"

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Modal, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
 import { QueuePlayer } from '../../types';
 import { makeStyles } from './dashboardStyles';
@@ -18,7 +18,8 @@ interface GuestStatusBannerProps {
   courtOccupants: Record<string, QueuePlayer[]>;
   playersPerGame: number;
   onDismissTurnBanner: () => void;
-  onClaimPowerGuest: (pin: string) => Promise<void>;
+  onClaimPowerGuest: (pin: string) => void;
+  onEnableNotifications?: () => Promise<boolean | void>;
 }
 
 export function GuestStatusBanner({
@@ -36,12 +37,16 @@ export function GuestStatusBanner({
   playersPerGame,
   onDismissTurnBanner,
   onClaimPowerGuest,
+  onEnableNotifications,
 }: GuestStatusBannerProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [showPowerGuestPrompt, setShowPowerGuestPrompt] = useState(false);
   const [powerGuestPinInput, setPowerGuestPinInput] = useState('');
+  const [notifPermission, setNotifPermission] = useState<string>(
+    Platform.OS === 'web' && typeof Notification !== 'undefined' ? Notification.permission : 'granted'
+  );
 
   if (isHost) return null;
 
@@ -82,11 +87,11 @@ export function GuestStatusBanner({
               <TouchableOpacity onPress={() => { setShowPowerGuestPrompt(false); setPowerGuestPinInput(''); }}>
                 <Text style={{ color: colors.gray1 }}>CANCEL</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={async () => {
+              <TouchableOpacity onPress={() => {
                 const pin = powerGuestPinInput;
                 setPowerGuestPinInput('');
                 setShowPowerGuestPrompt(false);
-                await onClaimPowerGuest(pin);
+                onClaimPowerGuest(pin);
               }}>
                 <Text style={{ color: colors.primary, fontWeight: 'bold' }}>UNLOCK</Text>
               </TouchableOpacity>
@@ -123,6 +128,22 @@ export function GuestStatusBanner({
           onPress={() => { setPowerGuestPinInput(''); setShowPowerGuestPrompt(true); }}
         >
           <Text style={{ color: colors.primary, fontWeight: 'bold', fontSize: 13 }}>⚡ CLAIM POWER MODE</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Web notification prompt */}
+      {Platform.OS === 'web' && notifPermission === 'default' && onEnableNotifications && (
+        <TouchableOpacity
+          style={{ backgroundColor: colors.deepBlue, padding: 10, alignItems: 'center' }}
+          onPress={async () => {
+            const granted = await onEnableNotifications();
+            if (typeof Notification !== 'undefined') setNotifPermission(Notification.permission);
+            if (granted) setNotifPermission('granted');
+          }}
+        >
+          <Text style={{ color: colors.gray2, fontSize: 13 }}>
+            🔔 Tap to enable notifications for your turn
+          </Text>
         </TouchableOpacity>
       )}
 

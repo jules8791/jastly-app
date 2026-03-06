@@ -72,7 +72,7 @@ export default function Dashboard() {
     avoidRepeats, setAvoidRepeats, soundEnabled, setSoundEnabled,
     isPowerGuest, sportEmoji, courtLabel, playersPerGame, sportLabel,
     hasShownStartupRef, logs, addLog, getRoster, updateRoster, safeEqual,
-    shareSessionStats, exportStats, processRequest, sendReq,
+    shareSessionStats, exportStats, requestNotificationPermission, processRequest, sendReq,
     grantPowerGuest, handleAutoPick, assignCourt, finishMatch, doSubstitute, claimPowerGuest,
     undoLastAction, courtStartTimes, courtServe,
   } = session;
@@ -566,6 +566,7 @@ export default function Dashboard() {
         playersPerGame={playersPerGame}
         onDismissTurnBanner={() => setIsMyTurnBanner(false)}
         onClaimPowerGuest={claimPowerGuest}
+        onEnableNotifications={!isHost ? requestNotificationPermission : undefined}
       />
 
       {/* ── HEADER ── */}
@@ -583,7 +584,7 @@ export default function Dashboard() {
       {/* ── MAIN CONTENT ── */}
       <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
         <View style={isTablet ? { flexDirection: 'row', alignItems: 'flex-start' } : {}}>
-          <View style={isTablet ? { width: Math.min(screenWidth * 0.48, 520) } : {}}>
+          <View style={isTablet ? { width: Math.min(screenWidth * 0.62, 660) } : {}}>
             <CourtsGrid
               activeCourts={club.active_courts || 4}
               courtOccupants={club.court_occupants || {}}
@@ -691,6 +692,10 @@ export default function Dashboard() {
                 onSetSkipNext={(name) => {
                   if (isHost) processRequest({ action: 'set_skip_next', payload: { targetName: name }, _fromHost: true });
                   else sendReq('set_skip_next', { targetName: name, name: myName });
+                }}
+                onSetGender={(name, g) => {
+                  if (isHost) processRequest({ action: 'set_gender', payload: { targetName: name, gender: g }, _fromHost: true });
+                  else sendReq('set_gender', { targetName: name, gender: g, name: myName });
                 }}
               />
             )}
