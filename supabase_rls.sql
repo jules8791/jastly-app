@@ -141,9 +141,45 @@ DROP POLICY IF EXISTS "requests: host can delete"   ON requests;
 
 -- Any authenticated user (including anonymous) can insert a request
 -- for a club they know the ID of. This lets guests send actions.
+-- Rate limiting is enforced by the trigger below (20 requests / 60 s).
 CREATE POLICY "requests: anyone can insert"
   ON requests FOR INSERT
   WITH CHECK (auth.uid() IS NOT NULL);
+
+-- ── Rate-limit trigger ────────────────────────────────────────────────────────
+-- Automatically stamps user_id = auth.uid() on every insert so we can count
+-- per-user request frequency without requiring the client to send it.
+-- Rejects if the same user has inserted >= 20 rows in the last 60 seconds.
+-- This stops a malicious guest from flooding the host's request queue.
+-- Safe to re-run: DROP IF EXISTS before CREATE.
+DROP TRIGGER IF EXISTS requests_rate_limit ON requests;
+DROP FUNCTION IF EXISTS public.check_request_rate_limit();
+
+CREATE OR REPLACE FUNCTION public.check_request_rate_limit()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_uid   UUID := auth.uid();
+  v_count INT;
+BEGIN
+  -- Stamp the inserting user's UID onto the row
+  NEW.user_id := v_uid;
+
+  -- Count this user's recent inserts
+  SELECT COUNT(*) INTO v_count
+  FROM requests
+  WHERE user_id = v_uid
+    AND created_at > now() - interval '60 seconds';
+
+  IF v_count >= 20 THEN
+    RAISE EXCEPTION 'Rate limit exceeded: slow down';
+  END IF;
+
+  RETURN NEW;
+END; $$;
+
+CREATE TRIGGER requests_rate_limit
+  BEFORE INSERT ON requests
+  FOR EACH ROW EXECUTE FUNCTION public.check_request_rate_limit();
 
 -- Only the host of a club can read its requests.
 -- This prevents guests from reading other guests' requests.
