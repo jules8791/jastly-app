@@ -660,19 +660,10 @@ export default function Dashboard() {
         onPressSettings={openSettings}
         onLeave={() => { if (!isHost) sendReq('leave'); }}
         onSignOut={isHost ? signOut : undefined}
-        onEndSession={isHost ? () => {
-          Alert.alert(
-            'End Session?',
-            'This will clear all players from the queue and empty every court. Match stats are kept.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'End Session', style: 'destructive', onPress: async () => {
-                setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {} }));
-                await supabase.from('clubs').update({ waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
-                addLog('SYSTEM: Session ended — queue and courts cleared.');
-              }},
-            ],
-          );
+        onEndSession={isHost ? async () => {
+          setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {} }));
+          await supabase.from('clubs').update({ waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
+          addLog('SYSTEM: Session ended — queue and courts cleared.');
         } : undefined}
       />
 

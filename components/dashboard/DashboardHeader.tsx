@@ -85,9 +85,19 @@ export function DashboardHeader({
         {isHost && onEndSession && (
           <TouchableOpacity
             style={[styles.btnDanger, { backgroundColor: colors.gray3, marginRight: 4 }]}
-            onPress={onEndSession}
+            onPress={() => {
+              const msg = 'Clear all players from the queue and empty every court? Stats are kept.';
+              if (Platform.OS === 'web') {
+                if (window.confirm(msg)) onEndSession();
+              } else {
+                Alert.alert('End Session?', msg, [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'End Session', style: 'destructive', onPress: onEndSession },
+                ]);
+              }
+            }}
           >
-            <Text style={styles.btnText}>END</Text>
+            <Text style={styles.btnText}>END SESSION</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity style={styles.btnDanger} onPress={handleAction}>
