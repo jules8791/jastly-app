@@ -163,9 +163,9 @@ export function computeGame2Teams(
       game2Team2: [...t2Males, ...t1Females],
     };
   } else {
-    // Same-sex: player with alphabetically lowest name swaps
-    const t1Swap = [...team1Players].sort()[0];
-    const t2Swap = [...team2Players].sort()[0];
+    // Same-sex: second player in each team swaps (index 1, predictable for the host)
+    const t1Swap = team1Players[1] ?? team1Players[0];
+    const t2Swap = team2Players[1] ?? team2Players[0];
     return {
       game2Team1: [...team1Players.filter(n => n !== t1Swap), t2Swap],
       game2Team2: [...team2Players.filter(n => n !== t2Swap), t1Swap],

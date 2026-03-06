@@ -220,7 +220,10 @@ export function TournamentSetupModal({
 
       <Text style={styles.sectionHeader}>FORMAT</Text>
       <View style={{ flexDirection: 'row', marginBottom: 16 }}>
-        {(['round_robin', 'knockout', 'super'] as const).map(f => (
+        {(['round_robin', 'knockout', 'super'] as const)
+          // Super requires team size ≥ 2: partner-swapping is meaningless for 1v1
+          .filter(f => f !== 'super' || teamSize >= 2)
+          .map(f => (
           <TouchableOpacity
             key={f}
             style={[styles.fmtBtn, format === f && styles.fmtBtnActive]}
@@ -243,7 +246,7 @@ export function TournamentSetupModal({
 
       <Text style={styles.sectionHeader}>TEAM SIZE</Text>
       <View style={[styles.row, { justifyContent: 'center' }]}>
-        <TouchableOpacity style={styles.mathBtn} onPress={() => setTeamSize(Math.max(2, teamSize - 1))}>
+        <TouchableOpacity style={styles.mathBtn} onPress={() => { const next = Math.max(1, teamSize - 1); setTeamSize(next); if (next < 2 && format === 'super') setFormat('round_robin'); }}>
           <Text style={{ color: colors.white, fontWeight: 'bold' }}>-</Text>
         </TouchableOpacity>
         <Text style={styles.mathVal}>{teamSize}</Text>

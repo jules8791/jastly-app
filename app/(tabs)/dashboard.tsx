@@ -848,7 +848,7 @@ export default function Dashboard() {
       <TournamentSetupModal
         visible={showTournamentSetup}
         waitingList={club?.waiting_list || []}
-        defaultTeamSize={Math.max(2, Math.floor(playersPerGame / 2))}
+        defaultTeamSize={Math.max(1, Math.floor(playersPerGame / 2))}
         onClose={() => setShowTournamentSetup(false)}
         onStart={(tournament) => {
           setShowTournamentSetup(false);
