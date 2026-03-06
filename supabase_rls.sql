@@ -117,13 +117,12 @@ CREATE POLICY "clubs: host can update"
   ON clubs FOR UPDATE
   USING (auth.uid() = host_uid);
 
--- Only authenticated (non-anonymous) users can create a club.
+-- Any authenticated user (including anonymous sessions) can create a club.
+-- Anonymous hosts sign in via signInAnonymously() before creating a club.
+-- The UPDATE/DELETE policies restrict further actions to the original host_uid.
 CREATE POLICY "clubs: authenticated insert"
   ON clubs FOR INSERT
-  WITH CHECK (
-    auth.uid() IS NOT NULL
-    AND auth.jwt() ->> 'is_anonymous' IS DISTINCT FROM 'true'
-  );
+  WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Only the host can delete their own club.
 CREATE POLICY "clubs: host can delete"
