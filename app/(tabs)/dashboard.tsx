@@ -659,6 +659,7 @@ export default function Dashboard() {
         onPressHelp={() => setShowHelp(true)}
         onPressSettings={openSettings}
         onLeave={() => { if (!isHost) sendReq('leave'); }}
+        onSignOut={isHost ? signOut : undefined}
         onEndSession={isHost ? () => {
           Alert.alert(
             'End Session?',

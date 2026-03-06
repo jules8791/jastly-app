@@ -16,6 +16,7 @@ interface DashboardHeaderProps {
   onPressSettings: () => void;
   onLeave: () => void;
   onEndSession?: () => void;
+  onSignOut?: () => void;
 }
 
 export function DashboardHeader({
@@ -28,26 +29,32 @@ export function DashboardHeader({
   onPressSettings,
   onLeave,
   onEndSession,
+  onSignOut,
 }: DashboardHeaderProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 
-  const handleLeave = async () => {
-    const leave = async () => {
+  const handleAction = async () => {
+    const action = async () => {
       onLeave();
-      await AsyncStorage.multiRemove(['currentClubId', 'isHost']).catch(() => {});
-      router.replace('/');
+      if (isHost && onSignOut) {
+        onSignOut();
+      } else {
+        await AsyncStorage.multiRemove(['currentClubId', 'isHost']).catch(() => {});
+        router.replace('/');
+      }
     };
-    const title = isHost ? 'Leave Session?' : 'Sign Out?';
-    const message = isHost ? 'Are you sure?' : 'Leave this session and return to the home screen?';
-    const confirmLabel = isHost ? 'Leave' : 'Sign Out';
+    const title = isHost ? 'Sign Out?' : 'Sign Out?';
+    const message = isHost
+      ? 'Sign out and return to the home screen?'
+      : 'Leave this session and return to the home screen?';
     if (Platform.OS === 'web') {
-      if (window.confirm(message)) await leave();
+      if (window.confirm(message)) await action();
     } else {
       Alert.alert(title, message, [
         { text: 'Cancel', style: 'cancel' },
-        { text: confirmLabel, style: 'destructive', onPress: leave },
+        { text: 'Sign Out', style: 'destructive', onPress: action },
       ]);
     }
   };
@@ -83,8 +90,8 @@ export function DashboardHeader({
             <Text style={styles.btnText}>END</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.btnDanger} onPress={handleLeave}>
-          <Text style={styles.btnText}>{isHost ? 'LEAVE' : 'SIGN OUT'}</Text>
+        <TouchableOpacity style={styles.btnDanger} onPress={handleAction}>
+          <Text style={styles.btnText}>SIGN OUT</Text>
         </TouchableOpacity>
       </View>
     </View>
