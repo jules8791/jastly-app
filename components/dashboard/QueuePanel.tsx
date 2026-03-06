@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
-import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { FlatList, Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../../contexts/theme-context';
 import { Club, QueuePlayer } from '../../types';
 import { makeStyles } from './dashboardStyles';
@@ -31,6 +31,7 @@ interface QueuePanelProps {
   onSetLeavingAt?: (name: string, leavingAt: number | null) => void;
   onSetSkillLevel?: (name: string, skillLevel: number) => void;
   onSetSkipNext?: (name: string) => void;
+  onSetGender?: (name: string, gender: 'M' | 'F') => void;
 }
 
 function leavingCountdown(leavingAt: number): string {
@@ -69,6 +70,7 @@ export function QueuePanel({
   onSetLeavingAt,
   onSetSkillLevel,
   onSetSkipNext,
+  onSetGender,
 }: QueuePanelProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -132,6 +134,327 @@ export function QueuePanel({
     else if (action === 'revoke_power') onGrantPowerGuest(playerName, false);
   };
 
+  const renderItem = useCallback(({ item: p, index: i }: { item: QueuePlayer; index: number }) => {
+    const isMe = p.name === myName;
+    const isSelected = selectedQueueIdx.includes(i);
+    const isMyTurn = !isHost && !isPowerGuest && firstActiveIdx >= 0 && waitingList[firstActiveIdx]?.name === myName;
+    const canSelect = isHost || isPowerGuest || isMyTurn;
+    const leavingSoon = !!p.leavingAt && (p.leavingAt - Date.now()) < 5 * 60_000;
+    const elevated = isHost || isPowerGuest;
+    const hasActions = elevated || isMe;
+    const isExpanded = expandedPlayer === p.name;
+    const isConfirming = pendingConfirm?.name === p.name;
+
+    return (
+      <React.Fragment key={i}>
+        {/* Row: sibling touchables so ··· never nests inside the row press */}
+        <View style={[styles.queueRow,
+          p.isResting && { opacity: 0.4 },
+          isMe && { borderWidth: 1, borderColor: colors.green },
+          isSelected && { backgroundColor: colors.selectedBg, borderWidth: 1, borderColor: colors.primary },
+          { flexDirection: 'row', alignItems: 'center' },
+        ]}>
+          {/* Selectable area */}
+          <TouchableOpacity
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+            onPress={() => {
+              if (!canSelect) return;
+              if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (isSelected) onSelectQueueIdx(selectedQueueIdx.filter(x => x !== i));
+              else if (selectedQueueIdx.length < playersPerGame) onSelectQueueIdx([...selectedQueueIdx, i]);
+            }}
+          >
+            <Text style={{ color: isSelected ? colors.primary : colors.gray3, marginRight: 10, fontSize: 14, width: 22, fontWeight: isSelected ? 'bold' : 'normal' }}>{i + 1}</Text>
+            <View style={[styles.genderBadge, { backgroundColor: p.gender === 'F' ? colors.pink : colors.blue }]}>
+              <Text style={{ color: colors.white, fontSize: 10, fontWeight: 'bold' }}>{p.gender || 'M'}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
+                <Text style={[styles.pName,
+                  p.isResting && { textDecorationLine: 'line-through', color: colors.gray3 },
+                  isMe && { color: colors.green },
+                  isSelected && { color: colors.primary },
+                ]}>
+                  {p.name}{isMe ? ' (you)' : ''}
+                </Text>
+                {p.isPowerGuest && (
+                  <View style={{ backgroundColor: colors.deepBlue, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 6 }}>
+                    <Text style={{ color: colors.primary, fontSize: 9, fontWeight: 'bold' }}>⚡ POWER</Text>
+                  </View>
+                )}
+                {p.skipNext && (
+                  <View style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 4 }}>
+                    <Text style={{ color: colors.gray2, fontSize: 9, fontWeight: 'bold' }}>⏭ SKIP</Text>
+                  </View>
+                )}
+                {p.skillLevel ? (
+                  <View style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 4 }}>
+                    <Text style={{ color: colors.gray2, fontSize: 9, fontWeight: 'bold' }}>{SKILL_LABELS[p.skillLevel] || p.skillLevel}</Text>
+                  </View>
+                ) : null}
+              </View>
+              {p.notes ? (
+                <Text style={{ color: colors.gray2, fontSize: 10, marginTop: 1 }} numberOfLines={1}>📝 {p.notes}</Text>
+              ) : null}
+              {p.leavingAt ? (
+                <Text style={{ color: leavingSoon ? colors.red : colors.gray3, fontSize: 10, marginTop: 1 }}>
+                  ⏰ {leavingCountdown(p.leavingAt)}
+                </Text>
+              ) : null}
+            </View>
+          </TouchableOpacity>
+
+          {/* ··· toggle — sibling, not nested inside row touchable */}
+          {hasActions && (
+            <TouchableOpacity
+              onPress={() => toggleExpanded(p.name)}
+              style={{ paddingHorizontal: 12, paddingVertical: 10 }}
+            >
+              <Text style={{ color: isExpanded ? colors.primary : colors.gray2, fontSize: 20, fontWeight: 'bold', lineHeight: 22 }}>
+                {isExpanded ? '×' : '···'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── ACTION PANEL ─────────────────────────────────── */}
+        {isExpanded && (
+          <View style={{ backgroundColor: colors.selectedBg, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, paddingHorizontal: 10, paddingBottom: 12, paddingTop: 8, gap: 8 }}>
+
+            {/* Inline confirmation bar */}
+            {isConfirming && pendingConfirm && (
+              <View style={{ backgroundColor: colors.bg, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 12 }}>
+                <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>
+                  {confirmLabels[pendingConfirm.action].title}
+                </Text>
+                <Text style={{ color: colors.gray3, fontSize: 12, marginBottom: 10 }}>
+                  {confirmLabels[pendingConfirm.action].body}
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={pill(confirmLabels[pendingConfirm.action].color, { flex: 1 })}
+                    onPress={() => executeConfirmed(p.name, pendingConfirm.action)}
+                  >
+                    <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 14 }}>
+                      {confirmLabels[pendingConfirm.action].btn}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={pill(colors.border, { flex: 1 })}
+                    onPress={() => setPendingConfirm(null)}
+                  >
+                    <Text style={{ color: colors.gray2, fontWeight: 'bold', fontSize: 14 }}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            {/* Action buttons (hidden while confirming) */}
+            {!isConfirming && (
+              <>
+                {/* Row 1: primary actions */}
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  <TouchableOpacity
+                    style={pill(p.isResting ? colors.green : colors.surface)}
+                    onPress={() => setPendingConfirm({ name: p.name, action: p.isResting ? 'resume' : 'pause' })}
+                  >
+                    <Text style={{ color: p.isResting ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                      {p.isResting ? '▶  RESUME' : 'II  PAUSE'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={pill(colors.red, { borderColor: colors.red })}
+                    onPress={() => setPendingConfirm({ name: p.name, action: 'remove' })}
+                  >
+                    <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                      {elevated && !isMe ? '✕  REMOVE' : '✕  LEAVE QUEUE'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {elevated && i > 0 && (
+                    <TouchableOpacity style={pill(colors.surface)} onPress={() => { onMoveUp(i); collapse(); }}>
+                      <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>▲  UP</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {elevated && i < waitingList.length - 1 && (
+                    <TouchableOpacity style={pill(colors.surface)} onPress={() => { onMoveDown(i); collapse(); }}>
+                      <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>▼  DOWN</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {!elevated && isMe && onSetLeavingAt && (
+                    <TouchableOpacity
+                      style={pill(showLeavingFor === p.name ? colors.primary : colors.surface, showLeavingFor === p.name ? { borderColor: colors.primary } : {})}
+                      onPress={() => setShowLeavingFor(showLeavingFor === p.name ? null : p.name)}
+                    >
+                      <Text style={{ color: showLeavingFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                        {p.leavingAt ? '⏰  LEAVING ✓' : '⏰  LEAVING'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {(elevated || isMe) && onSetSkipNext && (
+                    <TouchableOpacity
+                      style={pill(p.skipNext ? colors.primary : colors.surface, p.skipNext ? { borderColor: colors.primary } : {})}
+                      onPress={() => { onSetSkipNext(p.name); collapse(); }}
+                    >
+                      <Text style={{ color: p.skipNext ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                        {p.skipNext ? '⏭  UNSKIP' : '⏭  SKIP NEXT GAME'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {(elevated || isMe) && onSetGender && (
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      {(['M', 'F'] as const).map(g => (
+                        <TouchableOpacity
+                          key={g}
+                          style={pill(p.gender === g ? colors.primary : colors.surface, p.gender === g ? { borderColor: colors.primary } : {})}
+                          onPress={() => { onSetGender(p.name, g); collapse(); }}
+                        >
+                          <Text style={{ color: p.gender === g ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                            {g === 'M' ? '♂ M' : '♀ F'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </View>
+
+                {/* Row 2: elevated-only actions */}
+                {elevated && (
+                  <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                    {isHost && !p.isResting && (
+                      <TouchableOpacity
+                        style={pill(p.isPowerGuest ? colors.primary : colors.surface, p.isPowerGuest ? { borderColor: colors.primary } : {})}
+                        onPress={() => setPendingConfirm({ name: p.name, action: p.isPowerGuest ? 'revoke_power' : 'grant_power' })}
+                      >
+                        <Text style={{ color: p.isPowerGuest ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                          {p.isPowerGuest ? '⚡ REVOKE POWER' : '⚡ GRANT POWER'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {onSetPlayerNote && (
+                      <TouchableOpacity
+                        style={pill(showNoteFor === p.name ? colors.primary : colors.surface, showNoteFor === p.name ? { borderColor: colors.primary } : {})}
+                        onPress={() => { setShowNoteFor(showNoteFor === p.name ? null : p.name); setNoteInput(p.notes ?? ''); setShowLeavingFor(null); setShowSkillFor(null); }}
+                      >
+                        <Text style={{ color: showNoteFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>📝  NOTE</Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {onSetLeavingAt && (
+                      <TouchableOpacity
+                        style={pill(showLeavingFor === p.name ? colors.primary : colors.surface, showLeavingFor === p.name ? { borderColor: colors.primary } : {})}
+                        onPress={() => { setShowLeavingFor(showLeavingFor === p.name ? null : p.name); setShowNoteFor(null); setShowSkillFor(null); }}
+                      >
+                        <Text style={{ color: showLeavingFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                          {p.leavingAt ? '⏰  LEAVING ✓' : '⏰  LEAVING'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+
+                    {onSetSkillLevel && (
+                      <TouchableOpacity
+                        style={pill(showSkillFor === p.name ? colors.primary : colors.surface, showSkillFor === p.name ? { borderColor: colors.primary } : {})}
+                        onPress={() => { setShowSkillFor(showSkillFor === p.name ? null : p.name); setShowNoteFor(null); setShowLeavingFor(null); }}
+                      >
+                        <Text style={{ color: showSkillFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
+                          {p.skillLevel ? `★  SKILL: ${SKILL_LABELS[p.skillLevel]}` : '★  SKILL'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                {/* Note editor */}
+                {showNoteFor === p.name && onSetPlayerNote && (
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
+                    <TextInput
+                      style={{ flex: 1, backgroundColor: colors.bg, color: colors.white, borderRadius: 6, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 }}
+                      value={noteInput}
+                      onChangeText={setNoteInput}
+                      placeholder="Add note (blank = clear)..."
+                      placeholderTextColor={colors.gray3}
+                      autoFocus
+                      maxLength={100}
+                      onSubmitEditing={() => { onSetPlayerNote(p.name, noteInput); collapse(); }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => { onSetPlayerNote(p.name, noteInput); collapse(); }}
+                      style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, justifyContent: 'center' }}
+                    >
+                      <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 12 }}>SAVE</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Leaving-at picker */}
+                {showLeavingFor === p.name && onSetLeavingAt && (
+                  <View style={{ marginTop: 2 }}>
+                    <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 6 }}>Leaving in:</Text>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {[15, 30, 45, 60, 90].map(mins => (
+                        <TouchableOpacity
+                          key={mins}
+                          onPress={() => { onSetLeavingAt(p.name, Date.now() + mins * 60_000); collapse(); }}
+                          style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
+                        >
+                          <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 12 }}>{mins}m</Text>
+                        </TouchableOpacity>
+                      ))}
+                      {p.leavingAt && (
+                        <TouchableOpacity
+                          onPress={() => { onSetLeavingAt(p.name, null); collapse(); }}
+                          style={{ backgroundColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
+                        >
+                          <Text style={{ color: colors.red, fontWeight: 'bold', fontSize: 12 }}>Clear</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* Skill level picker */}
+                {showSkillFor === p.name && onSetSkillLevel && (
+                  <View style={{ marginTop: 2 }}>
+                    <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 6 }}>Skill level:</Text>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      {[1, 2, 3, 4, 5].map(lvl => (
+                        <TouchableOpacity
+                          key={lvl}
+                          onPress={() => { onSetSkillLevel(p.name, lvl); collapse(); }}
+                          style={{ backgroundColor: p.skillLevel === lvl ? colors.primary : colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
+                        >
+                          <Text style={{ color: p.skillLevel === lvl ? colors.bg : colors.gray2, fontWeight: 'bold', fontSize: 12 }}>{SKILL_LABELS[lvl]}</Text>
+                        </TouchableOpacity>
+                      ))}
+                      {p.skillLevel ? (
+                        <TouchableOpacity
+                          onPress={() => { onSetSkillLevel(p.name, 0); collapse(); }}
+                          style={{ backgroundColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
+                        >
+                          <Text style={{ color: colors.gray3, fontSize: 12 }}>Clear</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        )}
+      </React.Fragment>
+    );
+  }, [myName, selectedQueueIdx, isHost, isPowerGuest, firstActiveIdx, waitingList, expandedPlayer,
+    pendingConfirm, showNoteFor, showLeavingFor, showSkillFor, noteInput, colors, styles,
+    playersPerGame, onSelectQueueIdx, onMoveUp, onMoveDown, onSetPlayerNote, onSetLeavingAt,
+    onSetSkillLevel, onSetSkipNext, onSetGender, pill, confirmLabels, executeConfirmed, collapse,
+    toggleExpanded, setPendingConfirm, setNoteInput, setShowNoteFor, setShowLeavingFor, setShowSkillFor]);
+
   return (
     <>
       {/* ── BANNER ─────────────────────────────────────────────── */}
@@ -175,312 +498,20 @@ export function QueuePanel({
       </View>
 
       {/* ── QUEUE ──────────────────────────────────────────────── */}
-      {waitingList.map((p: QueuePlayer, i: number) => {
-        const isMe = p.name === myName;
-        const isSelected = selectedQueueIdx.includes(i);
-        const isMyTurn = !isHost && !isPowerGuest && firstActiveIdx >= 0 && waitingList[firstActiveIdx]?.name === myName;
-        const canSelect = isHost || isPowerGuest || isMyTurn;
-        const leavingSoon = !!p.leavingAt && (p.leavingAt - Date.now()) < 5 * 60_000;
-        const elevated = isHost || isPowerGuest;
-        const hasActions = elevated || isMe;
-        const isExpanded = expandedPlayer === p.name;
-        const isConfirming = pendingConfirm?.name === p.name;
-
-        return (
-          <React.Fragment key={i}>
-            {/* Row: sibling touchables so ··· never nests inside the row press */}
-            <View style={[styles.queueRow,
-              p.isResting && { opacity: 0.4 },
-              isMe && { borderWidth: 1, borderColor: colors.green },
-              isSelected && { backgroundColor: colors.selectedBg, borderWidth: 1, borderColor: colors.primary },
-              { flexDirection: 'row', alignItems: 'center' },
-            ]}>
-              {/* Selectable area */}
-              <TouchableOpacity
-                style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
-                onPress={() => {
-                  if (!canSelect) return;
-                  if (Platform.OS !== 'web') Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (isSelected) onSelectQueueIdx(selectedQueueIdx.filter(x => x !== i));
-                  else if (selectedQueueIdx.length < playersPerGame) onSelectQueueIdx([...selectedQueueIdx, i]);
-                }}
-              >
-                <Text style={{ color: isSelected ? colors.primary : colors.gray3, marginRight: 10, fontSize: 14, width: 22, fontWeight: isSelected ? 'bold' : 'normal' }}>{i + 1}</Text>
-                <View style={[styles.genderBadge, { backgroundColor: p.gender === 'F' ? colors.pink : colors.blue }]}>
-                  <Text style={{ color: colors.white, fontSize: 10, fontWeight: 'bold' }}>{p.gender || 'M'}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <Text style={[styles.pName,
-                      p.isResting && { textDecorationLine: 'line-through', color: colors.gray3 },
-                      isMe && { color: colors.green },
-                      isSelected && { color: colors.primary },
-                    ]}>
-                      {p.name}{isMe ? ' (you)' : ''}
-                    </Text>
-                    {p.isPowerGuest && (
-                      <View style={{ backgroundColor: colors.deepBlue, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 6 }}>
-                        <Text style={{ color: colors.primary, fontSize: 9, fontWeight: 'bold' }}>⚡ POWER</Text>
-                      </View>
-                    )}
-                    {p.skipNext && (
-                      <View style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 4 }}>
-                        <Text style={{ color: colors.gray2, fontSize: 9, fontWeight: 'bold' }}>⏭ SKIP</Text>
-                      </View>
-                    )}
-                    {p.skillLevel ? (
-                      <View style={{ backgroundColor: colors.border, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1, marginLeft: 4 }}>
-                        <Text style={{ color: colors.gray2, fontSize: 9, fontWeight: 'bold' }}>{SKILL_LABELS[p.skillLevel] || p.skillLevel}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  {p.notes ? (
-                    <Text style={{ color: colors.gray2, fontSize: 10, marginTop: 1 }} numberOfLines={1}>📝 {p.notes}</Text>
-                  ) : null}
-                  {p.leavingAt ? (
-                    <Text style={{ color: leavingSoon ? colors.red : colors.gray3, fontSize: 10, marginTop: 1 }}>
-                      ⏰ {leavingCountdown(p.leavingAt)}
-                    </Text>
-                  ) : null}
-                </View>
-              </TouchableOpacity>
-
-              {/* ··· toggle — sibling, not nested inside row touchable */}
-              {hasActions && (
-                <TouchableOpacity
-                  onPress={() => toggleExpanded(p.name)}
-                  style={{ paddingHorizontal: 12, paddingVertical: 10 }}
-                >
-                  <Text style={{ color: isExpanded ? colors.primary : colors.gray2, fontSize: 20, fontWeight: 'bold', lineHeight: 22 }}>
-                    {isExpanded ? '×' : '···'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* ── ACTION PANEL ─────────────────────────────────── */}
-            {isExpanded && (
-              <View style={{ backgroundColor: colors.selectedBg, borderBottomLeftRadius: 8, borderBottomRightRadius: 8, paddingHorizontal: 10, paddingBottom: 12, paddingTop: 8, gap: 8 }}>
-
-                {/* Inline confirmation bar */}
-                {isConfirming && pendingConfirm && (
-                  <View style={{ backgroundColor: colors.bg, borderRadius: 8, borderWidth: 1, borderColor: colors.border, padding: 12 }}>
-                    <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13, marginBottom: 2 }}>
-                      {confirmLabels[pendingConfirm.action].title}
-                    </Text>
-                    <Text style={{ color: colors.gray3, fontSize: 12, marginBottom: 10 }}>
-                      {confirmLabels[pendingConfirm.action].body}
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <TouchableOpacity
-                        style={pill(confirmLabels[pendingConfirm.action].color, { flex: 1 })}
-                        onPress={() => executeConfirmed(p.name, pendingConfirm.action)}
-                      >
-                        <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 14 }}>
-                          {confirmLabels[pendingConfirm.action].btn}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={pill(colors.border, { flex: 1 })}
-                        onPress={() => setPendingConfirm(null)}
-                      >
-                        <Text style={{ color: colors.gray2, fontWeight: 'bold', fontSize: 14 }}>Cancel</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-
-                {/* Action buttons (hidden while confirming) */}
-                {!isConfirming && (
-                  <>
-                    {/* Row 1: primary actions */}
-                    <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                      <TouchableOpacity
-                        style={pill(p.isResting ? colors.green : colors.surface)}
-                        onPress={() => setPendingConfirm({ name: p.name, action: p.isResting ? 'resume' : 'pause' })}
-                      >
-                        <Text style={{ color: p.isResting ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                          {p.isResting ? '▶  RESUME' : 'II  PAUSE'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={pill(colors.red, { borderColor: colors.red })}
-                        onPress={() => setPendingConfirm({ name: p.name, action: 'remove' })}
-                      >
-                        <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                          {elevated && !isMe ? '✕  REMOVE' : '✕  LEAVE QUEUE'}
-                        </Text>
-                      </TouchableOpacity>
-
-                      {elevated && i > 0 && (
-                        <TouchableOpacity style={pill(colors.surface)} onPress={() => { onMoveUp(i); collapse(); }}>
-                          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>▲  UP</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {elevated && i < waitingList.length - 1 && (
-                        <TouchableOpacity style={pill(colors.surface)} onPress={() => { onMoveDown(i); collapse(); }}>
-                          <Text style={{ color: colors.white, fontWeight: 'bold', fontSize: 13 }}>▼  DOWN</Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {!elevated && isMe && onSetLeavingAt && (
-                        <TouchableOpacity
-                          style={pill(showLeavingFor === p.name ? colors.primary : colors.surface, showLeavingFor === p.name ? { borderColor: colors.primary } : {})}
-                          onPress={() => setShowLeavingFor(showLeavingFor === p.name ? null : p.name)}
-                        >
-                          <Text style={{ color: showLeavingFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                            {p.leavingAt ? '⏰  LEAVING ✓' : '⏰  LEAVING'}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-
-                      {(elevated || isMe) && onSetSkipNext && (
-                        <TouchableOpacity
-                          style={pill(p.skipNext ? colors.primary : colors.surface, p.skipNext ? { borderColor: colors.primary } : {})}
-                          onPress={() => { onSetSkipNext(p.name); collapse(); }}
-                        >
-                          <Text style={{ color: p.skipNext ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                            {p.skipNext ? '⏭  UNSKIP' : '⏭  SKIP NEXT GAME'}
-                          </Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-
-                    {/* Row 2: elevated-only actions */}
-                    {elevated && (
-                      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                        {isHost && !p.isResting && (
-                          <TouchableOpacity
-                            style={pill(p.isPowerGuest ? colors.primary : colors.surface, p.isPowerGuest ? { borderColor: colors.primary } : {})}
-                            onPress={() => setPendingConfirm({ name: p.name, action: p.isPowerGuest ? 'revoke_power' : 'grant_power' })}
-                          >
-                            <Text style={{ color: p.isPowerGuest ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                              {p.isPowerGuest ? '⚡ REVOKE POWER' : '⚡ GRANT POWER'}
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-
-                        {onSetPlayerNote && (
-                          <TouchableOpacity
-                            style={pill(showNoteFor === p.name ? colors.primary : colors.surface, showNoteFor === p.name ? { borderColor: colors.primary } : {})}
-                            onPress={() => { setShowNoteFor(showNoteFor === p.name ? null : p.name); setNoteInput(p.notes ?? ''); setShowLeavingFor(null); setShowSkillFor(null); }}
-                          >
-                            <Text style={{ color: showNoteFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>📝  NOTE</Text>
-                          </TouchableOpacity>
-                        )}
-
-                        {onSetLeavingAt && (
-                          <TouchableOpacity
-                            style={pill(showLeavingFor === p.name ? colors.primary : colors.surface, showLeavingFor === p.name ? { borderColor: colors.primary } : {})}
-                            onPress={() => { setShowLeavingFor(showLeavingFor === p.name ? null : p.name); setShowNoteFor(null); setShowSkillFor(null); }}
-                          >
-                            <Text style={{ color: showLeavingFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                              {p.leavingAt ? '⏰  LEAVING ✓' : '⏰  LEAVING'}
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-
-                        {onSetSkillLevel && (
-                          <TouchableOpacity
-                            style={pill(showSkillFor === p.name ? colors.primary : colors.surface, showSkillFor === p.name ? { borderColor: colors.primary } : {})}
-                            onPress={() => { setShowSkillFor(showSkillFor === p.name ? null : p.name); setShowNoteFor(null); setShowLeavingFor(null); }}
-                          >
-                            <Text style={{ color: showSkillFor === p.name ? colors.bg : colors.white, fontWeight: 'bold', fontSize: 13 }}>
-                              {p.skillLevel ? `★  SKILL: ${SKILL_LABELS[p.skillLevel]}` : '★  SKILL'}
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    )}
-
-                    {/* Note editor */}
-                    {showNoteFor === p.name && onSetPlayerNote && (
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 2 }}>
-                        <TextInput
-                          style={{ flex: 1, backgroundColor: colors.bg, color: colors.white, borderRadius: 6, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13 }}
-                          value={noteInput}
-                          onChangeText={setNoteInput}
-                          placeholder="Add note (blank = clear)..."
-                          placeholderTextColor={colors.gray3}
-                          autoFocus
-                          maxLength={100}
-                          onSubmitEditing={() => { onSetPlayerNote(p.name, noteInput); collapse(); }}
-                        />
-                        <TouchableOpacity
-                          onPress={() => { onSetPlayerNote(p.name, noteInput); collapse(); }}
-                          style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, justifyContent: 'center' }}
-                        >
-                          <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 12 }}>SAVE</Text>
-                        </TouchableOpacity>
-                      </View>
-                    )}
-
-                    {/* Leaving-at picker */}
-                    {showLeavingFor === p.name && onSetLeavingAt && (
-                      <View style={{ marginTop: 2 }}>
-                        <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 6 }}>Leaving in:</Text>
-                        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                          {[15, 30, 45, 60, 90].map(mins => (
-                            <TouchableOpacity
-                              key={mins}
-                              onPress={() => { onSetLeavingAt(p.name, Date.now() + mins * 60_000); collapse(); }}
-                              style={{ backgroundColor: colors.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
-                            >
-                              <Text style={{ color: colors.bg, fontWeight: 'bold', fontSize: 12 }}>{mins}m</Text>
-                            </TouchableOpacity>
-                          ))}
-                          {p.leavingAt && (
-                            <TouchableOpacity
-                              onPress={() => { onSetLeavingAt(p.name, null); collapse(); }}
-                              style={{ backgroundColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
-                            >
-                              <Text style={{ color: colors.red, fontWeight: 'bold', fontSize: 12 }}>Clear</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      </View>
-                    )}
-
-                    {/* Skill level picker */}
-                    {showSkillFor === p.name && onSetSkillLevel && (
-                      <View style={{ marginTop: 2 }}>
-                        <Text style={{ color: colors.gray3, fontSize: 11, marginBottom: 6 }}>Skill level:</Text>
-                        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                          {[1, 2, 3, 4, 5].map(lvl => (
-                            <TouchableOpacity
-                              key={lvl}
-                              onPress={() => { onSetSkillLevel(p.name, lvl); collapse(); }}
-                              style={{ backgroundColor: p.skillLevel === lvl ? colors.primary : colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
-                            >
-                              <Text style={{ color: p.skillLevel === lvl ? colors.bg : colors.gray2, fontWeight: 'bold', fontSize: 12 }}>{SKILL_LABELS[lvl]}</Text>
-                            </TouchableOpacity>
-                          ))}
-                          {p.skillLevel ? (
-                            <TouchableOpacity
-                              onPress={() => { onSetSkillLevel(p.name, 0); collapse(); }}
-                              style={{ backgroundColor: colors.border, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 }}
-                            >
-                              <Text style={{ color: colors.gray3, fontSize: 12 }}>Clear</Text>
-                            </TouchableOpacity>
-                          ) : null}
-                        </View>
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-            )}
-          </React.Fragment>
-        );
-      })}
-
-      {waitingList.length === 0 && (
-        <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 40 }}>Queue is empty</Text>
-      )}
-
-      <View style={{ height: 40 }} />
+      {/* scrollEnabled={false}: parent ScrollView handles scrolling.
+          FlatList is used here for proper key-based reconciliation and
+          as the foundation for full virtualization if layout is restructured. */}
+      <FlatList
+        data={waitingList}
+        keyExtractor={(_, i) => String(i)}
+        renderItem={renderItem}
+        scrollEnabled={false}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <Text style={{ color: colors.gray3, textAlign: 'center', marginTop: 40 }}>Queue is empty</Text>
+        }
+        ListFooterComponent={<View style={{ height: 40 }} />}
+      />
     </>
   );
 }
