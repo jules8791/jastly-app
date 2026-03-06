@@ -36,6 +36,10 @@ import {
   TournamentStandingsModal, TeamDetailModal,
 } from '../../components/dashboard/TournamentModals';
 import { TournamentMatch, TournamentTeam } from '../../types';
+import { LeagueOrderPanel } from '../../components/league/LeagueOrderPanel';
+import {
+  StoredLeagueQueue, LeagueRubberResult, LeagueRubber, tabulateResults,
+} from '../../utils/leagueLogic';
 import { useClubSession } from '../../hooks/useClubSession';
 import { getSportConfig } from '../../constants/sports';
 import { DashboardHeader } from '../../components/dashboard/DashboardHeader';
@@ -75,7 +79,13 @@ export default function Dashboard() {
     shareSessionStats, exportStats, requestNotificationPermission, processRequest, sendReq,
     grantPowerGuest, handleAutoPick, assignCourt, finishMatch, doSubstitute, claimPowerGuest,
     undoLastAction, courtStartTimes, courtServe, effectiveWaitingList,
+    isLeagueQueueRef,
   } = session;
+
+  // ─── League Order of Play ──────────────────────────────────────────────────
+  const [leagueQueue, setLeagueQueue]       = useState<StoredLeagueQueue | null>(null);
+  const [rubberResults, setRubberResults]   = useState<LeagueRubberResult[]>([]);
+  const [leagueFixtureId, setLeagueFixtureId] = useState('');
 
   // ─── Courts & Queue ────────────────────────────────────────────────────────
   const [showCourts, setShowCourts] = useState(false);
@@ -133,6 +143,17 @@ export default function Dashboard() {
     if (selectedQueueIdx.length === playersPerGame) setShowCourts(true);
   }, [selectedQueueIdx, playersPerGame]);
 
+  // Load league queue + results from AsyncStorage (set by LeagueMatchSetupModal)
+  useEffect(() => {
+    AsyncStorage.multiGet(['current_league_queue', 'current_league_rubber_results', 'current_fixture_id'])
+      .then(([[, qRaw], [, rRaw], [, fid]]) => {
+        if (qRaw) setLeagueQueue(JSON.parse(qRaw));
+        if (rRaw) setRubberResults(JSON.parse(rRaw));
+        if (fid)  setLeagueFixtureId(fid);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!isHost || !club || hasShownStartupRef.current) return;
     hasShownStartupRef.current = true;
@@ -175,6 +196,65 @@ export default function Dashboard() {
     const names = displayRoster.map((p: Player) => p.name);
     if (stagedToAdd.length === names.length && names.length > 0) setStagedToAdd([]);
     else setStagedToAdd(names);
+  };
+
+  // ─── League Order of Play helpers ─────────────────────────────────────────
+
+  const assignLeagueRubber = (rubber: LeagueRubber) => {
+    if (!club || !isHost) return;
+    const activeCourts = club.active_courts || 4;
+    const occupied = new Set(Object.keys(club.court_occupants || {}).map(Number));
+    let courtIdx = 0;
+    while (occupied.has(courtIdx) && courtIdx < activeCourts) courtIdx++;
+    if (courtIdx >= activeCourts) {
+      Alert.alert('No courts available', 'All courts are occupied. Finish a match first.');
+      return;
+    }
+    // Build player objects with gender from rubber metadata
+    const players = [
+      ...rubber.homePlayers.map((name, i) => ({ name, gender: rubber.homeGenders[i] ?? 'M' as 'M' | 'F' })),
+      ...rubber.awayPlayers.map((name, i) => ({ name, gender: rubber.awayGenders[i] ?? 'M' as 'M' | 'F' })),
+    ];
+    processRequest({ action: 'start_match', payload: { courtIdx, players }, _fromHost: true });
+  };
+
+  const recordRubberResult = (index: number, homeScore: number, awayScore: number) => {
+    setRubberResults(prev => {
+      const next = prev.filter(r => r.index !== index);
+      next.push({ index, homeScore, awayScore });
+      next.sort((a, b) => a.index - b.index);
+      AsyncStorage.setItem('current_league_rubber_results', JSON.stringify(next)).catch(() => {});
+      return next;
+    });
+  };
+
+  const completeLeagueFixture = async () => {
+    if (!leagueQueue || !leagueFixtureId) return;
+    const { homeWins, awayWins } = tabulateResults(rubberResults);
+    const winnerId = homeWins > awayWins ? leagueQueue.homeTeamId
+      : awayWins > homeWins ? leagueQueue.awayTeamId
+      : null;
+    await supabase.from('league_fixtures').update({
+      status: 'completed',
+      result_home: homeWins,
+      result_away: awayWins,
+      winner_team_id: winnerId,
+      completed_at: new Date().toISOString(),
+      rubber_results: rubberResults,
+    }).eq('id', leagueFixtureId);
+    // Clear local state + AsyncStorage
+    setLeagueQueue(null);
+    setRubberResults([]);
+    setLeagueFixtureId('');
+    isLeagueQueueRef.current = false;
+    AsyncStorage.multiRemove([
+      'current_league_queue',
+      'current_league_rubber_results',
+      'current_fixture_id',
+      'current_fixture_home_team_id',
+      'current_fixture_away_team_id',
+    ]).catch(() => {});
+    Alert.alert('Fixture complete!', `${leagueQueue.homeTeamName} ${homeWins}–${awayWins} ${leagueQueue.awayTeamName}`);
   };
 
   const addStagedToQueue = async () => {
@@ -579,6 +659,20 @@ export default function Dashboard() {
         onPressHelp={() => setShowHelp(true)}
         onPressSettings={openSettings}
         onLeave={() => { if (!isHost) sendReq('leave'); }}
+        onEndSession={isHost ? () => {
+          Alert.alert(
+            'End Session?',
+            'This will clear all players from the queue and empty every court. Match stats are kept.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'End Session', style: 'destructive', onPress: async () => {
+                setClub((prev: any) => ({ ...prev, waiting_list: [], court_occupants: {} }));
+                await supabase.from('clubs').update({ waiting_list: [], court_occupants: {} }).eq('id', cidRef.current);
+                addLog('SYSTEM: Session ended — queue and courts cleared.');
+              }},
+            ],
+          );
+        } : undefined}
       />
 
       {/* ── MAIN CONTENT ── */}
@@ -613,7 +707,17 @@ export default function Dashboard() {
             />
           </View>
           <View style={isTablet ? { flex: 1, borderLeftWidth: 1, borderLeftColor: colors.border, minHeight: 400 } : {}}>
-            {club.tournament ? (
+            {leagueQueue ? (
+              <LeagueOrderPanel
+                queue={leagueQueue}
+                results={rubberResults}
+                courtsBusy={Object.keys(club.court_occupants || {}).length > 0}
+                isHost={isHost}
+                onPlay={assignLeagueRubber}
+                onRecordResult={recordRubberResult}
+                onComplete={completeLeagueFixture}
+              />
+            ) : club.tournament ? (
               <TournamentPanel
                 tournament={club.tournament}
                 isHost={isHost}
@@ -740,6 +844,7 @@ export default function Dashboard() {
         onShowSessionSummary={() => { setShowSettings(false); setShowSessionSummary(true); }}
         onShowInviteQR={() => { setShowSettings(false); setShowJoinQR(true); }}
         onToggleTheme={toggleTheme} onSignOut={signOut} onMyClubs={goMyClubs}
+        onLeagues={() => { setShowSettings(false); router.push('/leagues'); }}
         onPinToggle={handlePinToggle} onPowerGuestToggle={handlePowerGuestToggle}
         onShowSetupGuide={() => { setShowSettings(false); setShowSetupGuide(true); }}
         onShowTournament={() => { setShowSettings(false); setShowTournamentSetup(true); }}

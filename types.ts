@@ -83,6 +83,56 @@ export interface Tournament {
   partnerships?: string[];
 }
 
+// ── Leagues ───────────────────────────────────────────────────────────────────
+
+export interface League {
+  id: string;
+  name: string;
+  sport: string;
+  owner_uid: string;
+  description?: string | null;
+  /** 'SIXES' | 'FOURS_LEVEL' | 'FOURS_MIXED' | 'NONE' | null — controls Order of Play */
+  format_type?: string | null;
+  created_at: string;
+}
+
+export interface LeagueTeam {
+  id: string;
+  league_id: string;
+  name: string;
+  player_names: string[];
+  created_at: string;
+}
+
+export interface LeagueFixture {
+  id: string;
+  league_id: string;
+  home_team_id: string;
+  away_team_id: string;
+  round: number;
+  scheduled_at?: string | null;
+  status: 'scheduled' | 'in_progress' | 'completed';
+  club_id?: string | null;
+  result_home?: number | null;
+  result_away?: number | null;
+  winner_team_id?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface LeagueStanding {
+  league_id: string;
+  team_id: string;
+  team_name: string;
+  played: number;
+  wins: number;
+  draws: number;
+  losses: number;
+  goals_for: number;
+  goals_against: number;
+  points: number;
+}
+
 export interface CourtResult {
   courtIdx: string;
   players: QueuePlayer[];

@@ -7,9 +7,18 @@ export const SPORTS = {
   padel:          { label: 'Padel',          emoji: '🎾', court: 'Court', playersPerGame: 4, supportsDoublesToggle: false },
   pool:           { label: 'Pool',           emoji: '🎱', court: 'Table', playersPerGame: 2, supportsDoublesToggle: false },
   darts:          { label: 'Darts',          emoji: '🎯', court: 'Board', playersPerGame: 2, supportsDoublesToggle: false },
-  volleyball:     { label: 'Volleyball',     emoji: '🏐', court: 'Court', playersPerGame: 6, supportsDoublesToggle: false },
-  beachVolleyball:{ label: 'Beach Volley',   emoji: '🏖️', court: 'Court', playersPerGame: 4, supportsDoublesToggle: false },
+  volleyball:     { label: 'Volleyball',     emoji: '🏐', court: 'Court', playersPerGame: 6,  supportsDoublesToggle: false },
+  beachVolleyball:{ label: 'Beach Volley',   emoji: '🏖️', court: 'Court', playersPerGame: 4,  supportsDoublesToggle: false },
   basketball:     { label: 'Basketball',     emoji: '🏀', court: 'Court', playersPerGame: 10, supportsDoublesToggle: false },
+  futsal:         { label: 'Futsal',         emoji: '⚽', court: 'Pitch', playersPerGame: 10, supportsDoublesToggle: false },
+  snooker:        { label: 'Snooker',        emoji: '🔴', court: 'Table', playersPerGame: 2,  supportsDoublesToggle: false },
+  cornhole:       { label: 'Cornhole',       emoji: '🌽', court: 'Lane',  playersPerGame: 4,  supportsDoublesToggle: true  },
+  shuffleboard:   { label: 'Shuffleboard',   emoji: '🥌', court: 'Table', playersPerGame: 4,  supportsDoublesToggle: false },
+  foosball:       { label: 'Foosball',       emoji: '🕹️', court: 'Table', playersPerGame: 4,  supportsDoublesToggle: true  },
+  beerpong:       { label: 'Beer Pong',      emoji: '🍺', court: 'Table', playersPerGame: 4,  supportsDoublesToggle: false },
+  spikeball:      { label: 'Spikeball',      emoji: '🟡', court: 'Net',   playersPerGame: 4,  supportsDoublesToggle: false },
+  bocce:          { label: 'Bocce',          emoji: '🟢', court: 'Court', playersPerGame: 4,  supportsDoublesToggle: true  },
+  bowling:        { label: 'Bowling',        emoji: '🎳', court: 'Lane',  playersPerGame: 4,  supportsDoublesToggle: false },
 } as const;
 
 export type SportKey = keyof typeof SPORTS;

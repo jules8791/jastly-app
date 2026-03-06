@@ -15,6 +15,7 @@ interface DashboardHeaderProps {
   onPressHelp: () => void;
   onPressSettings: () => void;
   onLeave: () => void;
+  onEndSession?: () => void;
 }
 
 export function DashboardHeader({
@@ -26,6 +27,7 @@ export function DashboardHeader({
   onPressHelp,
   onPressSettings,
   onLeave,
+  onEndSession,
 }: DashboardHeaderProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -37,12 +39,15 @@ export function DashboardHeader({
       await AsyncStorage.multiRemove(['currentClubId', 'isHost']).catch(() => {});
       router.replace('/');
     };
+    const title = isHost ? 'Leave Session?' : 'Sign Out?';
+    const message = isHost ? 'Are you sure?' : 'Leave this session and return to the home screen?';
+    const confirmLabel = isHost ? 'Leave' : 'Sign Out';
     if (Platform.OS === 'web') {
-      if (window.confirm('Leave this session?')) await leave();
+      if (window.confirm(message)) await leave();
     } else {
-      Alert.alert('Leave Session?', 'Are you sure?', [
+      Alert.alert(title, message, [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: leave },
+        { text: confirmLabel, style: 'destructive', onPress: leave },
       ]);
     }
   };
@@ -70,8 +75,16 @@ export function DashboardHeader({
             <Text style={{ fontSize: 20 }}>⚙️</Text>
           </TouchableOpacity>
         )}
+        {isHost && onEndSession && (
+          <TouchableOpacity
+            style={[styles.btnDanger, { backgroundColor: colors.gray3, marginRight: 4 }]}
+            onPress={onEndSession}
+          >
+            <Text style={styles.btnText}>END</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={styles.btnDanger} onPress={handleLeave}>
-          <Text style={styles.btnText}>LEAVE</Text>
+          <Text style={styles.btnText}>{isHost ? 'LEAVE' : 'SIGN OUT'}</Text>
         </TouchableOpacity>
       </View>
     </View>

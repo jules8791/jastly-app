@@ -85,6 +85,7 @@ interface SettingsModalProps {
   onToggleTheme: () => void;
   onSignOut: () => void;
   onMyClubs: () => void;
+  onLeagues: () => void;
   onPinToggle: (val: boolean) => void;
   onPowerGuestToggle: (val: boolean) => Promise<void>;
   onShowSetupGuide: () => void;
@@ -124,6 +125,7 @@ export function SettingsModal({
   onToggleTheme,
   onSignOut,
   onMyClubs,
+  onLeagues,
   onPinToggle,
   onPowerGuestToggle,
   onShowSetupGuide,
@@ -246,6 +248,19 @@ export function SettingsModal({
                 </View>
               );
             })()}
+
+            {isHost && (
+              <TouchableOpacity style={{ marginBottom: 8, padding: 14, backgroundColor: colors.border, borderRadius: 8, alignItems: 'center' }} onPress={onMyClubs}>
+                <Text style={{ color: colors.white, fontWeight: 'bold' }}>🏢  MY CLUBS</Text>
+                <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 2 }}>Switch club or create a new one</Text>
+              </TouchableOpacity>
+            )}
+            {isEmailHost && (
+              <TouchableOpacity style={{ marginBottom: 20, padding: 14, backgroundColor: colors.border, borderRadius: 8, alignItems: 'center' }} onPress={onLeagues}>
+                <Text style={{ color: colors.white, fontWeight: 'bold' }}>🏆  LEAGUES</Text>
+                <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 2 }}>Manage leagues, teams and fixtures</Text>
+              </TouchableOpacity>
+            )}
 
             <Text style={styles.sectionHeader}>CLUB</Text>
             <Text style={styles.label}>Club Name</Text>
@@ -595,6 +610,12 @@ export function SettingsModal({
               <Switch value={tempSettings.pinEnabled} onValueChange={onPinToggle} thumbColor={tempSettings.pinEnabled ? colors.primary : colors.gray3} trackColor={{ true: colors.purple, false: colors.border }} />
             </View>
 
+            <Text style={styles.sectionHeader}>DISPLAY</Text>
+            <View style={styles.settingsRow}>
+              <Text style={{ color: colors.white }}>Dark Mode</Text>
+              <Switch value={mode === 'dark'} onValueChange={onToggleTheme} thumbColor={mode === 'dark' ? colors.primary : colors.gray3} trackColor={{ true: colors.purple, false: colors.border }} />
+            </View>
+
             <View style={{ flexDirection: 'row', marginVertical: 10 }}>
               <TouchableOpacity onPress={onShowLogs} style={[styles.btnPrimary, { flex: 1, marginRight: 5, padding: 10 }]}>
                 <Text style={[styles.btnText, { textAlign: 'center' }]}>VIEW LOGS</Text>
@@ -627,22 +648,9 @@ export function SettingsModal({
               <Text style={[styles.btnText, { textAlign: 'center' }]}>WIPE ALL DATA</Text>
             </TouchableOpacity>
 
-            <Text style={styles.sectionHeader}>DISPLAY</Text>
-            <View style={styles.settingsRow}>
-              <Text style={{ color: colors.white }}>Dark Mode</Text>
-              <Switch value={mode === 'dark'} onValueChange={onToggleTheme} thumbColor={mode === 'dark' ? colors.primary : colors.gray3} trackColor={{ true: colors.purple, false: colors.border }} />
-            </View>
-
             <TouchableOpacity style={[styles.btnDanger, { marginTop: 20, backgroundColor: colors.red }]} onPress={onSignOut}>
               <Text style={[styles.btnText, { textAlign: 'center' }]}>SIGN OUT</Text>
             </TouchableOpacity>
-
-            {isHost && (
-              <TouchableOpacity style={{ marginTop: 24, padding: 14, backgroundColor: colors.border, borderRadius: 8, alignItems: 'center' }} onPress={onMyClubs}>
-                <Text style={{ color: colors.white, fontWeight: 'bold' }}>🏢  MY CLUBS</Text>
-                <Text style={{ color: colors.gray3, fontSize: 11, marginTop: 2 }}>Switch club or create a new one</Text>
-              </TouchableOpacity>
-            )}
 
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
               <TouchableOpacity onPress={onCancel}>

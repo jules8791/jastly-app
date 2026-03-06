@@ -72,6 +72,12 @@ export function useClubSession() {
   // Serve rotation — local host-side ref, not synced to DB
   const [courtServe, setCourtServe] = useState<Record<string, string>>({});
   const prevClubRef = useRef<Club | null>(null);
+  // League fixture — set when a session was launched from the Leagues screen
+  const fixtureIdRef       = useRef('');
+  const fixtureHomeTeamRef = useRef('');
+  const fixtureAwayTeamRef = useRef('');
+  // True when a scripted Order-of-Play queue is active (suppress per-match fixture write)
+  const isLeagueQueueRef   = useRef(false);
 
   // ─── Keep refs in sync ───────────────────────────────────────────────────
   useEffect(() => { clubRef.current = club; }, [club]);
@@ -1070,6 +1076,33 @@ export function useClubSession() {
     };
     if (isHost) processRequest({ action: 'finish_match', payload, _fromHost: true });
     else sendReq('finish_match', payload);
+
+    // If this session was launched from the Leagues screen *without* a scripted queue,
+    // write the result back to the fixture now. When a league queue is active, the
+    // dashboard's completeLeagueFixture() handles the write after all rubbers are done.
+    const fid = fixtureIdRef.current;
+    if (fid && !isLeagueQueueRef.current && scoreA !== undefined && scoreB !== undefined) {
+      const homeId = fixtureHomeTeamRef.current || null;
+      const awayId = fixtureAwayTeamRef.current || null;
+      const winnerId = scoreA > scoreB ? homeId : scoreB > scoreA ? awayId : null;
+      supabase.from('league_fixtures').update({
+        status: 'completed',
+        result_home: scoreA,
+        result_away: scoreB,
+        winner_team_id: winnerId,
+        completed_at: new Date().toISOString(),
+      }).eq('id', fid).then(() => {
+        // Clear fixture context so it doesn't re-apply on subsequent matches
+        fixtureIdRef.current = '';
+        fixtureHomeTeamRef.current = '';
+        fixtureAwayTeamRef.current = '';
+        AsyncStorage.multiRemove([
+          'current_fixture_id',
+          'current_fixture_home_team_id',
+          'current_fixture_away_team_id',
+        ]).catch(() => {});
+      });
+    }
   };
 
   const undoLastAction = async () => {
@@ -1125,6 +1158,16 @@ export function useClubSession() {
         if (savedPin) setPinEnabled(savedPin === 'true');
         const savedSound = await AsyncStorage.getItem('sound_enabled');
         if (savedSound !== null) { setSoundEnabled(savedSound === 'true'); soundEnabledRef.current = savedSound === 'true'; }
+
+        // League fixture context (set by Leagues screen when launching a fixture)
+        const savedFixtureId   = await AsyncStorage.getItem('current_fixture_id');
+        const savedHomeTeamId  = await AsyncStorage.getItem('current_fixture_home_team_id');
+        const savedAwayTeamId  = await AsyncStorage.getItem('current_fixture_away_team_id');
+        const savedLeagueQueue = await AsyncStorage.getItem('current_league_queue');
+        if (savedFixtureId)  fixtureIdRef.current       = savedFixtureId;
+        if (savedHomeTeamId) fixtureHomeTeamRef.current = savedHomeTeamId;
+        if (savedAwayTeamId) fixtureAwayTeamRef.current = savedAwayTeamId;
+        if (savedLeagueQueue) isLeagueQueueRef.current  = true;
 
         if (!cid) return router.replace('/');
 
@@ -1393,6 +1436,9 @@ export function useClubSession() {
 
     // Optimistic queue (real state + in-flight guest changes merged)
     effectiveWaitingList,
+
+    // League queue ref (cleared by dashboard after completeLeagueFixture)
+    isLeagueQueueRef,
 
     // Core actions
     processRequest,
